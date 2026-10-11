@@ -51,7 +51,7 @@ export const CLASS_ORDER = ['swordsman', 'archer', 'mage'];
 // Снаряды. speed — по горизонтали, lift — начальная скорость вверх,
 // gravity — насколько снаряд снижается, life — секунды до исчезновения.
 export const PROJECTILES = {
-    arrow: { w: 8, h: 3, speed: 260, lift: 60, gravity: 300, pierce: false, life: 2, sprite: 'arrow' },
+    arrow: { w: 8, h: 3, speed: 260, lift: 30, gravity: 120, pierce: false, life: 2, sprite: 'arrow' },
     piercingArrow: { w: 8, h: 3, speed: 380, lift: 0, gravity: 0, pierce: true, life: 1.2, sprite: 'arrowBright' },
     bolt: { w: 6, h: 6, speed: 200, lift: 0, gravity: 0, pierce: false, life: 1.2, sprite: 'bolt' },
 };

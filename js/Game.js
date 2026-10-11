@@ -1,5 +1,9 @@
 import { Level, HAZARD } from './Level.js';
 import { Player } from './entities/Player.js';
+import { Enemy } from './entities/Enemy.js';
+import { Projectile } from './entities/Projectile.js';
+import { LootDrop } from './entities/LootDrop.js';
+import { CLASSES } from './data/classes.js';
 import { overlaps, touchesTile } from './Collision.js';
 import {
     STEP, MAX_FRAME, VIEW_W, VIEW_H,
@@ -7,16 +11,23 @@ import {
 } from './data/constants.js';
 
 export class Game {
-    constructor({ levelDef, input, renderer = null, onStateChange = () => {} }) {
+    // rng — источник случайных чисел от 0 до 1; в тестах подставляется свой.
+    constructor({ levelDef, input, renderer = null, onStateChange = () => {}, rng = Math.random }) {
         this.levelDef = levelDef;
         this.input = input;
         this.renderer = renderer;
         this.onStateChange = onStateChange;
+        this.rng = rng;
+        this.classId = 'swordsman';
 
         this.state = 'menu';
         this.level = null;
         this.player = null;
         this.coins = [];
+        this.enemies = [];
+        this.projectiles = [];
+        this.drops = [];
+        this.effects = [];      // короткие вспышки для отрисовки (взрыв мага)
         this.checkpoint = null;
         this.gold = 0;
         this.time = 0;
@@ -40,10 +51,14 @@ export class Game {
 
     startLevel() {
         this.level = new Level(this.levelDef);
-        this.player = new Player();
+        this.player = new Player(CLASSES[this.classId]);
         this.player.placeAt(this.level.spawn);
         this.checkpoint = this.level.spawn;
         this.coins = this.level.coins.map((coin) => ({ ...coin, taken: false }));
+        this.enemies = this.level.enemies.map((spawn) => new Enemy(spawn.type, spawn.x, spawn.y));
+        this.projectiles = [];
+        this.drops = [];
+        this.effects = [];
         this.gold = 0;
         this.time = 0;
         this.accumulator = 0;
@@ -76,6 +91,17 @@ export class Game {
         this.stop();
         this.level = null;
         this.setState('menu');
+    }
+
+    openClassSelect() {
+        this.stop();
+        this.level = null;
+        this.setState('classSelect');
+    }
+
+    startWithClass(classId) {
+        this.classId = classId;
+        this.restart();
     }
 
     pause() {
@@ -123,6 +149,13 @@ export class Game {
         player.update(dt, this.input, level);
         this.time += dt;
 
+        this.applyActions(player.takeActions());
+        this.updateProjectiles(dt);
+        this.updateEnemies(dt);
+        this.updateDrops(dt);
+        for (const effect of this.effects) effect.ttl -= dt;
+        this.effects = this.effects.filter((effect) => effect.ttl > 0);
+
         for (const coin of this.coins) {
             if (coin.taken || !overlaps(player, coin)) continue;
             coin.taken = true;
@@ -144,6 +177,72 @@ export class Game {
 
         if (player.dead) this.setState('dead');
         else if (overlaps(player, level.exit)) this.setState('complete');
+    }
+
+    // Применяет удары и выстрелы героя, накопленные за шаг.
+    applyActions(actions) {
+        for (const action of actions) {
+            if (action.type === 'projectile') {
+                this.projectiles.push(
+                    new Projectile(action.kind, action.x, action.y, action.dir, action.damage)
+                );
+                continue;
+            }
+            if (action.type === 'blast') {
+                this.effects.push({ kind: 'blast', x: action.x, y: action.y, radius: action.radius, ttl: 0.25, life: 0.25 });
+            }
+            for (const enemy of this.enemies) {
+                if (!overlaps(action.box, enemy)) continue;
+                // Взрыв отбрасывает от центра, удар — в сторону удара.
+                const dir = action.dir || (enemy.x + enemy.w / 2 < action.x ? -1 : 1);
+                enemy.hit(action.damage, action.id, dir);
+            }
+        }
+    }
+
+    updateProjectiles(dt) {
+        for (const projectile of this.projectiles) {
+            projectile.update(dt, this.level);
+            if (projectile.dead) continue;
+            for (const enemy of this.enemies) {
+                if (enemy.dead || !overlaps(projectile, enemy)) continue;
+                const hit = enemy.hit(projectile.damage, projectile.id, projectile.dir);
+                if (hit && !projectile.pierce) {
+                    projectile.dead = true;
+                    break;
+                }
+            }
+        }
+        this.projectiles = this.projectiles.filter((projectile) => !projectile.dead);
+    }
+
+    updateEnemies(dt) {
+        const { player, level } = this;
+        for (const enemy of this.enemies) {
+            if (enemy.dead) {
+                // Из убитого врага выпадает золото.
+                const [min, max] = enemy.def.gold;
+                const value = min + Math.floor(this.rng() * (max - min + 1));
+                const dir = this.rng() < 0.5 ? -1 : 1;
+                this.drops.push(new LootDrop(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, value, dir));
+                continue;
+            }
+            enemy.update(dt, level, player);
+            // Оглушённый враг не ранит — у ближнего боя есть окно для удара.
+            if (enemy.stun <= 0 && overlaps(player, enemy)) player.hurt(enemy.damage);
+        }
+        this.enemies = this.enemies.filter((enemy) => !enemy.dead && enemy.y <= level.height);
+    }
+
+    updateDrops(dt) {
+        for (const drop of this.drops) {
+            drop.update(dt, this.level);
+            if (drop.ready && !drop.dead && overlaps(this.player, drop)) {
+                this.gold += drop.value;
+                drop.dead = true;
+            }
+        }
+        this.drops = this.drops.filter((drop) => !drop.dead);
     }
 
     // Область героя, которой он задевает ловушки: чуть уже тела и без нижних

@@ -46,6 +46,15 @@ test('Level: точки объектов в пикселях', () => {
     assert.deepEqual(level.checkpoints, [{ x: 32, y: 32, w: 16, h: 16 }]);
 });
 
+test('Level: враги на карте', () => {
+    const level = new Level({ id: 'e', name: 'E', segments: [['P.s.wE', '######']] });
+    assert.deepEqual(level.enemies, [
+        { type: 'slime', x: 32, y: 0, w: 16, h: 16 },
+        { type: 'wolf', x: 64, y: 0, w: 16, h: 16 },
+    ]);
+    assert.equal(level.tileAt(2, 0), EMPTY);
+});
+
 test('joinSegments: склеивает сегменты по горизонтали', () => {
     assert.deepEqual(joinSegments([['ab', 'cd'], ['e', 'f']]), ['abe', 'cdf']);
 });
