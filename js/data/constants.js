@@ -26,3 +26,5 @@ export const HAZARD_INSET = 8;
 export const INVULN_TIME = 0.8;
 export const COIN_VALUE = 5;
 export const CAMERA_LERP = 8;
+// Сколько секунд на экране висит название подобранного предмета
+export const NOTICE_TIME = 2;

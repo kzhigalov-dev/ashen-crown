@@ -230,6 +230,7 @@ test('лучник: стрела летит в сторону взгляда', (
         { type: actions[0].type, kind: actions[0].kind, damage: actions[0].damage, dir: actions[0].dir },
         { type: 'projectile', kind: 'arrow', damage: 10, dir: 1 }
     );
+    assert.equal(actions[0].crit, false);
     assert.ok(actions[0].x > player.x + player.w / 2, 'появляется перед героем');
     player.update(STEP, HOLD_ATTACK, flat);
     assert.equal(player.takeActions().length, 0, 'перезарядка');
@@ -343,4 +344,69 @@ test('маг: взрыв тратит 30 маны и бьёт вокруг ге�
     empty.mana = 20;
     empty.update(STEP, PRESS_ABILITY, flat);
     assert.equal(empty.takeActions().length, 0);
+});
+
+// ---------- Снаряжение ----------
+
+function geared(id, bonus, rng = () => 0.99) {
+    const player = new Player(CLASSES[id], { bonus, rng });
+    player.placeAt(flat.spawn);
+    player.update(STEP, NONE, flat);
+    player.takeActions();
+    return player;
+}
+
+test('снаряжение: здоровье прибавляется к здоровью класса', () => {
+    const player = geared('mage', { hp: 30 });
+    assert.equal(player.maxHp, 100);
+    assert.equal(player.hp, 100);
+});
+
+test('снаряжение: урон прибавляется к атаке и к способности', () => {
+    const player = geared('swordsman', { damage: 6 });
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(player.takeActions()[0].damage, 20);
+    steps(player, flat, 30);
+    player.takeActions();
+    player.update(STEP, PRESS_ABILITY, flat);
+    assert.equal(player.takeActions()[0].damage, 26);
+});
+
+test('снаряжение: скорость атаки сокращает перезарядку', () => {
+    const player = geared('swordsman', { attackSpeed: 100 });
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.ok(Math.abs(player.attackCooldown - 0.2) < 1e-9);
+});
+
+test('крит удваивает урон и помечает удар', () => {
+    const lucky = geared('archer', { crit: 50 }, () => 0.2);
+    lucky.update(STEP, HOLD_ATTACK, flat);
+    const [hit] = lucky.takeActions();
+    assert.equal(hit.damage, 20);
+    assert.equal(hit.crit, true);
+
+    const unlucky = geared('archer', { crit: 50 }, () => 0.9);
+    unlucky.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(unlucky.takeActions()[0].damage, 10);
+});
+
+test('крит бросается один раз на взмах', () => {
+    const rolls = [0.2, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9];
+    let index = 0;
+    const player = geared('swordsman', { crit: 50 }, () => rolls[index++ % rolls.length]);
+    const damages = new Set();
+    for (let i = 0; i < 6; i++) {
+        player.update(STEP, HOLD_ATTACK, flat);
+        for (const action of player.takeActions()) damages.add(action.damage);
+    }
+    assert.deepEqual([...damages], [28]);
+    assert.equal(index, 1, 'случай спрошен один раз');
+});
+
+test('без шанса крита случай не расходуется', () => {
+    let calls = 0;
+    const player = geared('archer', {}, () => { calls++; return 0; });
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(calls, 0);
+    assert.equal(player.takeActions()[0].crit, false);
 });

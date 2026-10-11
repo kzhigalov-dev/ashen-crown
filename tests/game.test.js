@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Game } from '../js/Game.js';
 import { InputHandler } from '../js/InputHandler.js';
 import { STEP } from '../js/data/constants.js';
-import { fakeTarget } from './helpers.js';
+import { Save } from '../js/systems/Save.js';
+import { fakeTarget, seq, memoryStorage } from './helpers.js';
 
 // В Node нет requestAnimationFrame — подменяем для start/stop.
 globalThis.requestAnimationFrame = () => 1;
@@ -27,14 +28,14 @@ function setup() {
     const target = fakeTarget();
     const input = new InputHandler(target);
     const states = [];
-    const game = new Game({ levelDef, input, onStateChange: (state) => states.push(state) });
+    const game = new Game({ levels: [levelDef], input, onStateChange: (state) => states.push(state) });
     input.attach();
     game.startLevel();
     return { target, input, game, states };
 }
 
 test('начальное состояние — меню', () => {
-    const game = new Game({ levelDef, input: new InputHandler(fakeTarget()) });
+    const game = new Game({ levels: [levelDef], input: new InputHandler(fakeTarget()) });
     assert.equal(game.state, 'menu');
     assert.equal(game.level, null);
 });
@@ -203,10 +204,11 @@ const arenaDef = {
     ]],
 };
 
-function arena(classId = 'swordsman', rng = () => 0) {
+// rng = 0.5: золота выпадает 5, предметы не выпадают (0.5 > шанса 0.15).
+function arena(classId = 'swordsman', rng = () => 0.5, extra = {}) {
     const target = fakeTarget();
     const input = new InputHandler(target);
-    const game = new Game({ levelDef: arenaDef, input, rng });
+    const game = new Game({ levels: [arenaDef], input, rng, ...extra });
     input.attach();
     game.classId = classId;
     game.startLevel();
@@ -251,14 +253,14 @@ test('мечник убивает врага, выпадает золото, п�
     target.dispatch('keyup', { code: 'KeyJ' });
     assert.equal(game.enemies.length, 1);
     assert.equal(game.drops.length, 1);
-    assert.equal(game.drops[0].value, 3, 'при rng = 0 выпадает минимум');
+    assert.equal(game.drops[0].value, 5, 'при rng = 0.5 из 3–6 выпадает 5');
     assert.equal(game.gold, 0, 'монету нельзя подобрать, пока она вылетает');
     for (let i = 0; i < 120 && game.drops.length > 0; i++) {
         game.player.x = game.drops[0].x;
         game.update(STEP);
         input.endStep();
     }
-    assert.equal(game.gold, 3);
+    assert.equal(game.gold, 5);
     assert.equal(game.drops.length, 0);
 });
 
@@ -326,15 +328,200 @@ test('враг, упавший за пределы уровня, исчезае�
     assert.equal(game.drops.length, 0);
 });
 
-test('выбор класса: отдельное состояние, класс сохраняется при рестарте', () => {
+test('выбор класса — отдельное состояние без уровня', () => {
     const { game } = arena();
     game.openClassSelect();
     assert.equal(game.state, 'classSelect');
     assert.equal(game.level, null);
-    game.startWithClass('mage');
+});
+
+// ---------- Профиль, лут, сохранение ----------
+
+const armorItem = () => ({ slot: 'armor', rarity: 'rare', tier: 1, name: 'Редкий доспех', stats: { hp: 20 } });
+
+function saved(classId = 'swordsman', rng = () => 0.5, levels = [arenaDef]) {
+    const target = fakeTarget();
+    const input = new InputHandler(target);
+    const storage = memoryStorage();
+    const save = new Save(storage);
+    const states = [];
+    const game = new Game({ levels, input, rng, save, onStateChange: (state) => states.push(state) });
+    game.newGame(classId);
+    return { target, input, game, save, storage, states };
+}
+
+// Ведёт героя по всем выпавшим предметам, пока их не подберёт.
+function collectAll(game, input) {
+    for (let i = 0; i < 400 && game.drops.length > 0; i++) {
+        game.player.x = game.drops[0].x;
+        game.update(STEP);
+        input.endStep();
+    }
+}
+
+test('новая игра создаёт профиль, сохраняет его и открывает карту', () => {
+    const { game, save, states } = saved('archer');
+    assert.equal(game.state, 'map');
+    assert.deepEqual(states, ['map']);
+    assert.equal(game.profile.classId, 'archer');
+    assert.equal(game.hasSave, true);
+    assert.equal(save.load().classId, 'archer');
+});
+
+test('продолжить: прогресс читается из сохранения', () => {
+    const first = saved('mage');
+    first.game.profile.gold = 77;
+    first.game.persist();
+
+    const input = new InputHandler(fakeTarget());
+    const game = new Game({ levels: [arenaDef], input, save: new Save(first.storage) });
+    assert.equal(game.continueGame(), true);
+    assert.equal(game.state, 'map');
+    assert.equal(game.profile.classId, 'mage');
+    assert.equal(game.profile.gold, 77);
+});
+
+test('без сохранения продолжить нельзя', () => {
+    const game = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()), save: new Save(memoryStorage()) });
+    assert.equal(game.hasSave, false);
+    assert.equal(game.continueGame(), false);
+    assert.equal(game.state, 'menu');
+});
+
+test('карта ⇄ снаряжение ⇄ уровень', () => {
+    const { game } = saved();
+    game.openEquipment();
+    assert.equal(game.state, 'equipment');
+    game.openMap();
+    assert.equal(game.state, 'map');
+    game.playLevel(0);
     assert.equal(game.state, 'playing');
-    assert.equal(game.player.classDef.id, 'mage');
-    assert.equal(game.player.maxHp, 70);
-    game.restart();
-    assert.equal(game.player.classDef.id, 'mage');
+    game.openEquipment();
+    assert.equal(game.state, 'playing', 'в бою снаряжение не открыть');
+    game.openMap();
+    assert.equal(game.level, null);
+});
+
+test('с врага падает предмет, подбор кладёт его в сумку', () => {
+    // По порядку: золото (3), сторона (вправо), шанс предмета (0.1 < 0.15),
+    // редкость (обычный), слот (оружие).
+    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0));
+    game.playLevel(0);
+    for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
+    game.player.x = 85;
+    game.player.invuln = 5;
+    target.dispatch('keydown', { code: 'KeyK' });
+    game.update(STEP);
+    input.endStep();
+    game.update(STEP);
+    assert.equal(game.drops.filter((drop) => drop.kind === 'gold').length, 2);
+    assert.equal(game.drops.filter((drop) => drop.kind === 'item').length, 2);
+    collectAll(game, input);
+    assert.equal(game.gold, 6);
+    assert.deepEqual(game.profile.inventory.items.map((item) => item.name), ['Обычный посох', 'Обычный посох']);
+    assert.equal(game.notice.text, 'Обычный посох');
+});
+
+test('сумка полна: найденный предмет разбирается в золото', () => {
+    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0));
+    for (let i = 0; i < 12; i++) game.profile.inventory.add(armorItem());
+    game.playLevel(0);
+    for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
+    game.player.x = 85;
+    game.player.invuln = 5;
+    target.dispatch('keydown', { code: 'KeyK' });
+    game.update(STEP);
+    input.endStep();
+    game.update(STEP);
+    collectAll(game, input);
+    assert.equal(game.profile.inventory.items.length, 12);
+    assert.equal(game.gold, 6 + 2 + 2, 'золото врагов и по 2 за каждый обычный предмет');
+    assert.match(game.notice.text, /Сумка полна/);
+});
+
+test('прохождение: золото забега идёт в общее, рекорд и сохранение', () => {
+    const { game, save } = saved();
+    game.playLevel(0);
+    game.gold = 40;
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.state, 'complete');
+    assert.equal(game.profile.gold, 40);
+    assert.equal(game.profile.bestRun, 40);
+    assert.equal(save.load().gold, 40);
+
+    game.playLevel(0);
+    game.gold = 15;
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.profile.gold, 55);
+    assert.equal(game.profile.bestRun, 40, 'рекорд не понижается');
+    assert.equal(game.profile.unlocked, 1, 'локация одна — открывать нечего');
+});
+
+test('прохождение локации открывает следующую', () => {
+    const { game } = saved('swordsman', () => 0.5, [arenaDef, arenaDef]);
+    game.playLevel(1);
+    assert.equal(game.state, 'map', 'закрытую локацию запустить нельзя');
+    game.playLevel(0);
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.profile.unlocked, 2);
+    game.playLevel(1);
+    assert.equal(game.state, 'playing');
+    assert.equal(game.levelIndex, 1);
+});
+
+test('смерть: золото забега теряется, найденные предметы остаются', () => {
+    const { game, save } = saved();
+    game.playLevel(0);
+    game.gold = 40;
+    game.collectItem(armorItem());
+    game.player.hp = 20;
+    game.player.y = game.level.height + 5;
+    game.update(STEP);
+    assert.equal(game.state, 'dead');
+    assert.equal(game.profile.gold, 0);
+    assert.equal(save.load().inventory.items.length, 1);
+});
+
+test('надетое снаряжение усиливает героя и сохраняется', () => {
+    const { game, save } = saved();
+    game.profile.inventory.add(armorItem());
+    game.openEquipment();
+    game.equipItem(0);
+    assert.equal(save.load().inventory.equipped.armor.name, 'Редкий доспех');
+    game.openMap();
+    game.playLevel(0);
+    assert.equal(game.player.maxHp, 140);
+    assert.equal(game.player.hp, 140);
+});
+
+test('снять и разобрать на экране снаряжения', () => {
+    const { game, save, states } = saved();
+    game.profile.inventory.add(armorItem());
+    game.openEquipment();
+    game.equipItem(0);
+    game.unequipSlot('armor');
+    assert.equal(game.profile.inventory.equipped.armor, null);
+    const before = states.length;
+    game.dismantleItem(0);
+    assert.equal(game.profile.gold, 6, 'редкий предмет первой локации');
+    assert.equal(game.profile.inventory.items.length, 0);
+    assert.equal(states.length, before + 1, 'экран получил сигнал перерисоваться');
+    assert.equal(save.load().gold, 6);
+    game.dismantleItem(0);
+    assert.equal(game.profile.gold, 6, 'пустая ячейка ничего не даёт');
+});
+
+test('без хранилища игра работает, просто не сохраняет', () => {
+    const input = new InputHandler(fakeTarget());
+    const game = new Game({ levels: [arenaDef], input });
+    game.newGame('swordsman');
+    assert.equal(game.state, 'map');
+    assert.equal(game.hasSave, false);
+    game.playLevel(0);
+    game.player.x = game.level.exit.x + 3;
+    assert.doesNotThrow(() => game.update(STEP));
+    assert.equal(game.state, 'complete');
 });

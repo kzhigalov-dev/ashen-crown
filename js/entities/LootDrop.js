@@ -1,14 +1,16 @@
 import { moveAndCollide } from '../Collision.js';
 import { GRAVITY, MAX_FALL } from '../data/constants.js';
 
-const PICKUP_DELAY = 0.35;  // монету нельзя подобрать, пока она вылетает из врага
+const PICKUP_DELAY = 0.35;  // добычу нельзя подобрать, пока она вылетает из врага
 
-// Золото, выпавшее из врага: подпрыгивает, падает и ждёт героя.
+// Добыча, выпавшая из врага: подпрыгивает, падает и ждёт героя.
+// Бывает двух видов: золото ({ value }) и предмет ({ item }).
 export class LootDrop {
     // x, y — центр точки, откуда выпадает; dir — в какую сторону отлетает.
-    constructor(x, y, value, dir) {
-        this.kind = 'gold';
+    constructor(x, y, dir, { value = 0, item = null }) {
+        this.kind = item ? 'item' : 'gold';
         this.value = value;
+        this.item = item;
         this.w = 8;
         this.h = 8;
         this.x = x - this.w / 2;

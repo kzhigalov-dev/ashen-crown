@@ -1,6 +1,7 @@
 import { Entity } from './Entity.js';
 import { moveAndCollide } from '../Collision.js';
 import { CLASSES } from '../data/classes.js';
+import { CRIT_MULT } from '../data/items.js';
 import {
     TILE, GRAVITY, RUN_SPEED, JUMP_SPEED, MAX_FALL,
     COYOTE_TIME, JUMP_BUFFER, JUMP_CUT, INVULN_TIME, AIR_JUMP_FACTOR,
@@ -11,11 +12,14 @@ import {
 let nextActionId = 1;
 
 export class Player extends Entity {
-    constructor(classDef = CLASSES.swordsman) {
+    // bonus — сумма свойств надетого снаряжения; rng — источник случайности для крита.
+    constructor(classDef = CLASSES.swordsman, { bonus = null, rng = Math.random } = {}) {
         super(0, 0, 10, 22);
         this.classDef = classDef;
-        this.maxHp = classDef.maxHp;
-        this.hp = classDef.maxHp;
+        this.bonus = { damage: 0, hp: 0, attackSpeed: 0, crit: 0, ...bonus };
+        this.rng = rng;
+        this.maxHp = classDef.maxHp + this.bonus.hp;
+        this.hp = this.maxHp;
         this.maxMana = classDef.maxMana;
         this.mana = classDef.maxMana;
         this.jumpsLeft = classDef.extraJumps;  // прыжки в воздухе (у лучника один)
@@ -32,6 +36,8 @@ export class Player extends Entity {
         this.dashTime = 0;    // сколько ещё длится рывок
         this.swingId = 0;
         this.dashId = 0;
+        this.swingHit = { damage: 0, crit: false };  // урон текущего взмаха
+        this.dashHit = { damage: 0, crit: false };   // урон текущего рывка
         this.actions = [];    // удары и выстрелы этого шага — их забирает Game
     }
 
@@ -53,9 +59,9 @@ export class Player extends Entity {
         else this.move(dt, dir, input, level);
 
         if (this.attackTime > 0 && this.classDef.attack.type === 'melee') {
-            const { damage, reach } = this.classDef.attack;
             this.actions.push({
-                type: 'melee', id: this.swingId, damage, dir: this.facing, box: this.meleeBox(reach),
+                type: 'melee', id: this.swingId, ...this.swingHit, dir: this.facing,
+                box: this.meleeBox(this.classDef.attack.reach),
             });
         }
     }
@@ -93,14 +99,14 @@ export class Player extends Entity {
 
     // Рывок: быстрое движение по прямой, гравитация не действует.
     dash(dt, level) {
-        const { speed, damage } = this.classDef.ability;
+        const { speed } = this.classDef.ability;
         this.dashTime -= dt;
         this.vx = this.facing * speed;
         this.vy = 0;
         this.onGround = moveAndCollide(this, level, dt).onGround;
         this.state = 'dash';
         this.actions.push({
-            type: 'melee', id: this.dashId, damage, dir: this.facing,
+            type: 'melee', id: this.dashId, ...this.dashHit, dir: this.facing,
             box: { x: this.x - 2, y: this.y, w: this.w + 4, h: this.h },
         });
     }
@@ -112,10 +118,15 @@ export class Player extends Entity {
         if (cost > this.mana) return;
 
         this.mana -= cost;
-        this.attackCooldown = attack.cooldown;
+        // Скорость атаки от снаряжения сокращает перезарядку.
+        this.attackCooldown = attack.cooldown / (1 + this.bonus.attackSpeed / 100);
         this.attackTime = attack.duration ?? 0.15;
-        if (attack.type === 'melee') this.swingId = nextActionId++;
-        else this.fire(attack);
+        if (attack.type === 'melee') {
+            this.swingId = nextActionId++;
+            this.swingHit = this.rollDamage(attack.damage);
+        } else {
+            this.fire(attack);
+        }
     }
 
     startAbility(input) {
@@ -129,6 +140,7 @@ export class Player extends Entity {
         if (ability.type === 'dash') {
             this.dashTime = ability.duration;
             this.dashId = nextActionId++;
+            this.dashHit = this.rollDamage(ability.damage);
             this.invuln = Math.max(this.invuln, ability.duration + 0.1);
         } else if (ability.type === 'projectile') {
             this.fire(ability);
@@ -137,7 +149,7 @@ export class Player extends Entity {
             const cy = this.y + this.h / 2;
             const r = ability.radius;
             this.actions.push({
-                type: 'blast', id: nextActionId++, damage: ability.damage, dir: 0,
+                type: 'blast', id: nextActionId++, ...this.rollDamage(ability.damage), dir: 0,
                 x: cx, y: cy, radius: r,
                 box: { x: cx - r, y: cy - r, w: r * 2, h: r * 2 },
             });
@@ -150,11 +162,17 @@ export class Player extends Entity {
         this.actions.push({
             type: 'projectile',
             kind: move.projectile,
-            damage: move.damage,
+            ...this.rollDamage(move.damage),
             dir: this.facing,
             x: this.x + this.w / 2 + this.facing * 8,
             y: this.y + 14,
         });
+    }
+
+    // Урон удара с учётом снаряжения. Крит бросается один раз на удар.
+    rollDamage(base) {
+        const crit = this.bonus.crit > 0 && this.rng() * 100 < this.bonus.crit;
+        return { damage: (base + this.bonus.damage) * (crit ? CRIT_MULT : 1), crit };
     }
 
     // Область удара мечом: от середины героя вперёд.
