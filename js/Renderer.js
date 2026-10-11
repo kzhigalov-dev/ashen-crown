@@ -2,6 +2,7 @@ import { TILE, VIEW_W, VIEW_H } from './data/constants.js';
 import { SOLID } from './Level.js';
 import { PALETTE, SPRITES } from './data/sprites.js';
 import { CLASSES } from './data/classes.js';
+import { rarityOf } from './systems/Loot.js';
 import { drawHud } from './ui/Hud.js';
 
 const SKY = '#141b2b';
@@ -168,7 +169,18 @@ export class Renderer {
             ctx.drawImage(sprites.coin, coin.x + 4, coin.y + 4 + bob);
         }
         for (const drop of game.drops) {
-            ctx.drawImage(sprites.coin, Math.round(drop.x), Math.round(drop.y));
+            const x = Math.round(drop.x);
+            const y = Math.round(drop.y);
+            if (drop.kind === 'gold') {
+                ctx.drawImage(sprites.coin, x, y);
+                continue;
+            }
+            // Предмет: мешочек в мерцающей рамке цвета редкости.
+            ctx.globalAlpha = 0.55 + 0.45 * Math.sin(game.time * 6);
+            ctx.fillStyle = rarityOf(drop.item).color;
+            ctx.fillRect(x - 2, y - 2, 12, 12);
+            ctx.globalAlpha = 1;
+            ctx.drawImage(sprites.lootBag, x, y);
         }
     }
 

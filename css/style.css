@@ -168,3 +168,120 @@ button.quiet {
     background: transparent;
     color: var(--muted);
 }
+
+.hint {
+    font-size: 0.85em;
+    color: var(--muted);
+}
+
+.hint.warn {
+    color: #f28a2e;
+}
+
+/* Карта локаций */
+.map-list {
+    display: flex;
+    gap: 1em;
+}
+
+.map-list button {
+    min-width: 12em;
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Экран снаряжения: надетое, сумка, описание выбранного предмета */
+.equip {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1.3fr;
+    gap: 1.2em;
+    width: 100%;
+    max-width: 60em;
+    text-align: left;
+}
+
+.equip h3 {
+    margin: 0 0 0.5em;
+    font-size: 1em;
+    font-weight: normal;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.slots {
+    display: grid;
+    gap: 0.4em;
+}
+
+.bag {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.4em;
+}
+
+/* Ячейка предмета: цвет рамки и подписи задаёт редкость (--rarity). */
+.item {
+    min-width: 0;
+    padding: 0.5em 0.3em;
+    border-color: var(--rarity, var(--border));
+    color: var(--rarity, var(--ink));
+    font-size: 0.8em;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bag .item {
+    aspect-ratio: 1;
+}
+
+.item.selected {
+    background: #45395a;
+    outline: 0.15em solid var(--ink);
+    outline-offset: 0.1em;
+}
+
+.totals,
+.detail p {
+    margin: 0.6em 0 0;
+    font-size: 0.8em;
+    line-height: 1.6;
+    color: var(--muted);
+}
+
+.detail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4em;
+}
+
+.detail strong {
+    font-size: 1.1em;
+    color: var(--rarity, var(--ink));
+}
+
+.detail ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.85em;
+    line-height: 1.6;
+}
+
+.detail .up {
+    color: #7fd67a;
+}
+
+.detail .down {
+    color: #f2685a;
+}
+
+.detail button {
+    min-width: 0;
+    width: 100%;
+}

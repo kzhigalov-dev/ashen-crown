@@ -39,4 +39,14 @@ export function drawHud(ctx, game, sprites) {
     ctx.fillText(String(game.gold), 104, 8);
     ctx.fillStyle = '#ffe27a';
     ctx.fillText(String(game.gold), 103, 7);
+
+    // Название подобранного предмета — по центру вверху, цветом редкости.
+    if (game.notice) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = INK;
+        ctx.fillText(game.notice.text, 241, 25);
+        ctx.fillStyle = game.notice.color;
+        ctx.fillText(game.notice.text, 240, 24);
+        ctx.textAlign = 'left';
+    }
 }

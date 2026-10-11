@@ -343,4 +343,16 @@ export const SPRITES = {
         'kvk............kvvk.',
         'kk..............kkk.',
     ],
+
+    // Мешочек с предметом. Рамку цвета редкости рисует Renderer.
+    lootBag: [
+        '..kppk..',
+        '...bb...',
+        '.kppppk.',
+        'kpPPpppk',
+        'kpPppppk',
+        'kppppppk',
+        'kppppppk',
+        '.kkkkkk.',
+    ],
 };
