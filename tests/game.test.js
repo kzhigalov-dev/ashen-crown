@@ -427,8 +427,8 @@ test('карта ⇄ снаряжение ⇄ уровень', () => {
 
 test('с врага падает предмет, подбор кладёт его в сумку', () => {
     // По порядку: золото (3), сторона (вправо), шанс предмета (0.1 < 0.15),
-    // редкость (обычный), слот (оружие).
-    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0));
+    // редкость (обычный), слот (оружие), вид (посох огня).
+    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0, 0));
     game.playLevel(0);
     for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
     game.player.x = 85;
@@ -441,12 +441,12 @@ test('с врага падает предмет, подбор кладёт ег�
     assert.equal(game.drops.filter((drop) => drop.kind === 'item').length, 2);
     collectAll(game, input);
     assert.equal(game.gold, 6);
-    assert.deepEqual(game.profile.inventory.items.map((item) => item.name), ['Обычный посох', 'Обычный посох']);
-    assert.equal(game.notice.text, 'Обычный посох');
+    assert.deepEqual(game.profile.inventory.items.map((item) => item.name), ['Обычный посох огня', 'Обычный посох огня']);
+    assert.equal(game.notice.text, 'Обычный посох огня');
 });
 
 test('сумка полна: найденный предмет разбирается в золото', () => {
-    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0));
+    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0, 0));
     for (let i = 0; i < 12; i++) game.profile.inventory.add(armorItem());
     game.playLevel(0);
     for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
@@ -944,4 +944,108 @@ test('cleared: число пройденных локаций, до загруз
     assert.equal(fresh.cleared, 2);
     const empty = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()) });
     assert.equal(empty.cleared, 0);
+});
+
+// ---------- Виды оружия в игре ----------
+
+const weaponItem = (kind, classId) => ({ slot: 'weapon', rarity: 'common', tier: 1, name: kind, stats: { damage: 4 }, classId, kind });
+
+// Арена с надетым оружием заданного вида.
+function armedArena(kind, classId, def = arenaDef) {
+    const target = fakeTarget();
+    const input = new InputHandler(target);
+    const game = new Game({ levels: [def], input, rng: () => 0.5 });
+    input.attach();
+    game.newGame(classId);
+    game.profile.inventory.add(weaponItem(kind, classId));
+    game.equipItem(0);
+    game.playLevel(0);
+    for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
+    return { target, input, game };
+}
+
+test('надетое оружие определяет атаку героя', () => {
+    const { game } = armedArena('axe', 'swordsman');
+    assert.equal(game.player.weapon.id, 'axe');
+    assert.equal(game.player.bonus.damage, 4);
+    const plain = arena('swordsman');
+    assert.equal(plain.game.player.weapon.id, 'sword', 'без снаряжения — оружие класса');
+});
+
+test('ледяной осколок замораживает врага: он стоит и не отлетает', () => {
+    const { game, input, target } = armedArena('iceStaff', 'mage');
+    target.dispatch('keydown', { code: 'KeyJ' });
+    run(game, input, 1);
+    target.dispatch('keyup', { code: 'KeyJ' });
+    run(game, input, 40, () => game.enemies[0].frozen > 0);
+    const enemy = game.enemies[0];
+    assert.ok(enemy.frozen > 0.4);
+    assert.ok(enemy.stun > 0.4, 'заморозка дольше обычного оглушения');
+    const x = enemy.x;
+    run(game, input, 10);
+    assert.equal(enemy.x, x, 'замороженный не двигается');
+});
+
+test('ледяная волна замораживает всех вокруг; босса заморозить нельзя', () => {
+    const { game, input, target } = armedArena('iceStaff', 'mage');
+    game.player.x = 85;
+    game.player.invuln = 5;
+    target.dispatch('keydown', { code: 'KeyK' });
+    run(game, input, 1);
+    assert.ok(game.enemies.every((enemy) => enemy.frozen > 1));
+    assert.equal(game.effects.find((effect) => effect.kind === 'blast').style, 'frost');
+
+    const boss = armedArena('iceStaff', 'mage', bossArena('#P.......T........E#'));
+    boss.game.player.x = 130;
+    boss.game.player.invuln = 5;
+    boss.target.dispatch('keydown', { code: 'KeyK' });
+    run(boss.game, boss.input, 1);
+    assert.equal(boss.game.enemies[0].hp, 260 - 18, 'урон прошёл (14 + 4 от оружия)');
+    assert.equal(boss.game.enemies[0].stun, 0);
+});
+
+test('цепная молния бьёт ближайших врагов в радиусе, но не дальних', () => {
+    const far = {
+        id: 'far', name: 'Far',
+        segments: [['......................', '......................', 'P..s.s.s.s.s.......sE.', '######################']],
+    };
+    const { game, input, target } = armedArena('stormStaff', 'mage', far);
+    game.player.x = 100;
+    game.player.invuln = 5;
+    target.dispatch('keydown', { code: 'KeyK' });
+    run(game, input, 1);
+    const hurt = game.enemies.filter((enemy) => enemy.hp < enemy.maxHp);
+    assert.equal(hurt.length, 4, 'не больше четырёх целей');
+    assert.equal(game.enemies.at(-1).hp, 30, 'дальний слизень вне радиуса');
+    assert.equal(game.effects.filter((effect) => effect.kind === 'lightning').length, 4);
+    const struckX = hurt.map((enemy) => enemy.x).sort((a, b) => a - b);
+    assert.ok(struckX.at(-1) - struckX[0] <= 120, 'поражены соседние враги');
+});
+
+test('копьё достаёт врага, до которого не дотягивается меч', () => {
+    const reach = (kind) => {
+        const { game, input, target } = armedArena(kind, 'swordsman');
+        game.player.x = 30;   // слизень в 35 пикселях от середины героя
+        target.dispatch('keydown', { code: 'KeyJ' });
+        run(game, input, 3);
+        return game.enemies[0].hp < 30;
+    };
+    assert.equal(reach('sword'), false);
+    assert.equal(reach('spear'), true);
+});
+
+test('дождь стрел накрывает землю впереди героя', () => {
+    const { game, input, target } = armedArena('shortbow', 'archer');
+    target.dispatch('keydown', { code: 'KeyK' });
+    run(game, input, 1);
+    assert.equal(game.projectiles.length, 5);
+    const startX = game.player.x;
+    let maxY = 0;
+    run(game, input, 20);
+    for (const arrow of game.projectiles) maxY = Math.max(maxY, game.player.y - arrow.y);
+    assert.ok(maxY > 20, 'стрелы уходят вверх');
+    run(game, input, 90);
+    assert.equal(game.projectiles.length, 0, 'все стрелы упали');
+    assert.ok(game.enemies.some((enemy) => enemy.hp < 30), 'хотя бы один враг впереди задет');
+    assert.equal(game.player.x, startX);
 });

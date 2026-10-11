@@ -1,6 +1,7 @@
 import { Entity } from './Entity.js';
 import { moveAndCollide } from '../Collision.js';
 import { CLASSES } from '../data/classes.js';
+import { WEAPONS } from '../data/weapons.js';
 import { CRIT_MULT } from '../data/items.js';
 import {
     TILE, GRAVITY, RUN_SPEED, JUMP_SPEED, MAX_FALL,
@@ -12,10 +13,12 @@ import {
 let nextActionId = 1;
 
 export class Player extends Entity {
-    // bonus — сумма свойств надетого снаряжения; rng — источник случайности для крита.
-    constructor(classDef = CLASSES.swordsman, { bonus = null, rng = Math.random } = {}) {
+    // bonus — сумма свойств надетого снаряжения; rng — источник случайности для крита;
+    // weapon — вид оружия (из data/weapons.js): он задаёт атаку и способность.
+    constructor(classDef = CLASSES.swordsman, { bonus = null, rng = Math.random, weapon = null } = {}) {
         super(0, 0, 10, 22);
         this.classDef = classDef;
+        this.weapon = weapon ?? WEAPONS[classDef.starter];
         this.bonus = { damage: 0, hp: 0, attackSpeed: 0, crit: 0, ...bonus };
         this.rng = rng;
         this.maxHp = classDef.maxHp + this.bonus.hp;
@@ -59,10 +62,10 @@ export class Player extends Entity {
         if (this.dashTime > 0) this.dash(dt, level);
         else this.move(dt, dir, input, level);
 
-        if (this.attackTime > 0 && this.classDef.attack.type === 'melee') {
+        if (this.attackTime > 0 && this.weapon.attack.type === 'melee') {
             this.actions.push({
                 type: 'melee', id: this.swingId, ...this.swingHit, dir: this.facing,
-                box: this.meleeBox(this.classDef.attack.reach),
+                box: this.meleeBox(this.weapon.attack.reach),
             });
         }
     }
@@ -106,7 +109,7 @@ export class Player extends Entity {
 
     // Рывок: быстрое движение по прямой, гравитация не действует.
     dash(dt, level) {
-        const { speed } = this.classDef.ability;
+        const { speed } = this.weapon.ability;
         this.dashTime -= dt;
         this.vx = this.facing * speed;
         this.vy = 0;
@@ -119,7 +122,7 @@ export class Player extends Entity {
     }
 
     startAttack(input) {
-        const attack = this.classDef.attack;
+        const attack = this.weapon.attack;
         const cost = attack.manaCost ?? 0;
         if (!input.isDown('attack') || this.attackCooldown > 0 || this.dashTime > 0) return;
         if (cost > this.mana) return;
@@ -138,7 +141,7 @@ export class Player extends Entity {
     }
 
     startAbility(input) {
-        const ability = this.classDef.ability;
+        const ability = this.weapon.ability;
         const cost = ability.manaCost ?? 0;
         if (!input.wasPressed('ability') || this.abilityCooldown > 0 || this.dashTime > 0) return;
         if (cost > this.mana) return;
@@ -154,30 +157,46 @@ export class Player extends Entity {
         } else if (ability.type === 'projectile') {
             this.fire(ability);
         } else if (ability.type === 'blast') {
+            // Удар по площади вокруг героя: взрыв, круговой удар, ледяная волна.
             const cx = this.x + this.w / 2;
             const cy = this.y + this.h / 2;
             const r = ability.radius;
             this.events.push('blast');
             this.actions.push({
                 type: 'blast', id: nextActionId++, ...this.rollDamage(ability.damage), dir: 0,
-                x: cx, y: cy, radius: r,
+                x: cx, y: cy, radius: r, effect: ability.effect, stun: ability.stun ?? 0,
                 box: { x: cx - r, y: cy - r, w: r * 2, h: r * 2 },
+            });
+        } else if (ability.type === 'chain') {
+            // Цепная молния: цели выбирает Game — ближайших врагов знает только он.
+            this.events.push('chain');
+            this.actions.push({
+                type: 'chain', id: nextActionId++, ...this.rollDamage(ability.damage),
+                x: this.x + this.w / 2, y: this.y + this.h / 2,
+                range: ability.range, targets: ability.targets,
             });
         }
     }
 
     // Выстрел: снаряд появляется у самого героя на уровне пояса —
     // так он попадает и по врагу вплотную, и по низкому врагу.
+    // Некоторые способности выпускают несколько снарядов: залп (на разной высоте)
+    // и дождь стрел (с разной дугой). Крит бросается один раз на весь выстрел.
     fire(move) {
         this.events.push('shot');
-        this.actions.push({
-            type: 'projectile',
-            kind: move.projectile,
-            ...this.rollDamage(move.damage),
-            dir: this.facing,
-            x: this.x + this.w / 2 + this.facing * 2,
-            y: this.y + 14,
-        });
+        const hit = this.rollDamage(move.damage);
+        const shots = move.lifts ?? move.offsets ?? [0];
+        for (const value of shots) {
+            this.actions.push({
+                type: 'projectile',
+                kind: move.projectile,
+                ...hit,
+                dir: this.facing,
+                x: this.x + this.w / 2 + this.facing * 2,
+                y: this.y + 14 + (move.offsets ? value : 0),
+                lift: move.lifts ? value : null,
+            });
+        }
     }
 
     // Урон удара с учётом снаряжения. Крит бросается один раз на удар.

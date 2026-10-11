@@ -25,6 +25,7 @@ export class Enemy extends Entity {
         this.stun = 0;
         this.knockDir = 0;
         this.flash = 0;
+        this.frozen = 0;            // остаток заморозки (для отрисовки инея)
         this.lastHitId = null;
         this.animTime = 0;
         this.phase = 'walk';        // для скелета: walk → windup → strike → recover
@@ -37,6 +38,7 @@ export class Enemy extends Entity {
     update(dt, level, player) {
         this.animTime += dt;
         this.flash = Math.max(0, this.flash - dt);
+        this.frozen = Math.max(0, this.frozen - dt);
 
         if (this.def.behavior === 'flyer') {
             this.fly(dt, player);
@@ -209,13 +211,16 @@ export class Enemy extends Entity {
     }
 
     // Попадание. id — номер удара: тот же удар дважды не ранит.
-    // dir — куда отбросить (1 или -1). Возвращает true, если урон прошёл.
-    hit(damage, id, dir) {
+    // dir — куда отбросить (1 или -1); freeze — заморозка в секундах:
+    // замороженный враг стоит на месте дольше обычного оглушения и не отлетает.
+    // Возвращает true, если урон прошёл.
+    hit(damage, id, dir, freeze = 0) {
         if (this.dead || id === this.lastHitId) return false;
         this.lastHitId = id;
         this.takeDamage(damage);
-        this.stun = STUN_TIME;
-        this.knockDir = dir;
+        this.stun = Math.max(STUN_TIME, freeze);
+        this.frozen = freeze;
+        this.knockDir = freeze > 0 ? 0 : dir;
         this.flash = FLASH_TIME;
         return true;
     }

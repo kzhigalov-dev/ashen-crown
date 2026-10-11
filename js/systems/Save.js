@@ -1,9 +1,11 @@
 import { Inventory } from './Inventory.js';
 import { CLASSES } from '../data/classes.js';
+import { WEAPONS } from '../data/weapons.js';
 import { RARITIES, SLOTS, STATS } from '../data/items.js';
 
 export const SAVE_KEY = 'ashen-crown-save';
-export const SAVE_VERSION = 1;
+// Версия 2: у оружия появился вид, локаций стало пятнадцать.
+export const SAVE_VERSION = 2;
 
 // Прогресс игрока. Создаётся при начале новой игры.
 export function defaultProfile(classId) {
@@ -23,6 +25,8 @@ function isItem(item) {
     if (!RARITIES.some((rarity) => rarity.id === item.rarity)) return false;
     if (typeof item.name !== 'string' || !Number.isFinite(item.tier)) return false;
     if (!item.stats || typeof item.stats !== 'object') return false;
+    // У оружия должен быть известный вид, и он должен подходить классу.
+    if (item.slot === 'weapon' && WEAPONS[item.kind]?.classId !== item.classId) return false;
     return Object.entries(item.stats).every(([stat, value]) => stat in STATS && Number.isFinite(value));
 }
 

@@ -6,6 +6,7 @@ import { Projectile } from './entities/Projectile.js';
 import { LootDrop } from './entities/LootDrop.js';
 import { overlaps, touchesTile } from './Collision.js';
 import { CLASSES } from './data/classes.js';
+import { WEAPONS } from './data/weapons.js';
 import { ENEMIES } from './data/enemies.js';
 import { rollDrop, dismantleValue, rarityOf } from './systems/Loot.js';
 import { Save, defaultProfile } from './systems/Save.js';
@@ -229,7 +230,10 @@ export class Game {
         const classDef = CLASSES[this.profile.classId];
 
         this.level = new Level(this.levelDef);
-        this.player = new Player(classDef, { bonus: this.profile.inventory.totals(), rng: this.rng });
+        // Надетое оружие задаёт атаку и способность; без него — оружие класса по умолчанию.
+        const { inventory } = this.profile;
+        const weapon = WEAPONS[inventory.equipped.weapon?.kind] ?? WEAPONS[classDef.starter];
+        this.player = new Player(classDef, { bonus: inventory.totals(), rng: this.rng, weapon });
         this.player.placeAt(this.level.spawn);
         this.checkpoint = this.level.spawn;
         this.rested = new Set();    // костры, у которых герой уже лечился
@@ -474,19 +478,28 @@ export class Game {
     applyActions(actions) {
         for (const action of actions) {
             if (action.type === 'projectile') {
-                const projectile = new Projectile(action.kind, action.x, action.y, action.dir, action.damage);
+                const projectile = new Projectile(
+                    action.kind, action.x, action.y, action.dir, action.damage, null, action.lift
+                );
                 projectile.crit = action.crit;
                 this.projectiles.push(projectile);
                 continue;
             }
+            if (action.type === 'chain') {
+                this.chainLightning(action);
+                continue;
+            }
             if (action.type === 'blast') {
-                this.effects.push({ kind: 'blast', x: action.x, y: action.y, radius: action.radius, ttl: 0.25, life: 0.25 });
+                this.effects.push({
+                    kind: 'blast', style: action.effect, x: action.x, y: action.y,
+                    radius: action.radius, ttl: 0.3, life: 0.3,
+                });
             }
             for (const enemy of this.enemies) {
                 if (!overlaps(action.box, enemy)) continue;
                 // Взрыв отбрасывает от центра, удар — в сторону удара.
                 const dir = action.dir || (enemy.x + enemy.w / 2 < action.x ? -1 : 1);
-                this.hitEnemy(enemy, action.damage, action.id, dir, action.crit);
+                this.hitEnemy(enemy, action.damage, action.id, dir, action.crit, action.stun ?? 0);
             }
         }
     }
@@ -497,7 +510,9 @@ export class Game {
             if (projectile.dead) continue;
             for (const enemy of this.enemies) {
                 if (enemy.dead || !overlaps(projectile, enemy)) continue;
-                const hit = this.hitEnemy(enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit);
+                const hit = this.hitEnemy(
+                    enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit, projectile.stun
+                );
                 if (hit && !projectile.pierce) {
                     projectile.dead = true;
                     break;
@@ -646,9 +661,26 @@ export class Game {
         this.notice = { text: `Сумка полна: +${gold} золота`, color: '#b9ad98', ttl: NOTICE_TIME };
     }
 
+    // Цепная молния: бьёт ближайших врагов в радиусе, перескакивая от одного к другому.
+    chainLightning({ x, y, damage, id, crit, range, targets }) {
+        const center = (enemy) => ({ x: enemy.x + enemy.w / 2, y: enemy.y + enemy.h / 2 });
+        const distance = (enemy) => Math.hypot(center(enemy).x - x, center(enemy).y - y);
+        const struck = this.enemies
+            .filter((enemy) => !enemy.dead && distance(enemy) <= range)
+            .sort((a, b) => distance(a) - distance(b))
+            .slice(0, targets);
+        let from = { x, y };
+        for (const enemy of struck) {
+            const to = center(enemy);
+            this.effects.push({ kind: 'lightning', x: from.x, y: from.y, x2: to.x, y2: to.y, ttl: 0.18, life: 0.18 });
+            this.hitEnemy(enemy, damage, id, to.x < x ? -1 : 1, crit);
+            from = to;
+        }
+    }
+
     // Попадание по врагу: звук и всплывающее число урона.
-    hitEnemy(enemy, damage, id, dir, crit = false) {
-        if (!enemy.hit(damage, id, dir)) return false;
+    hitEnemy(enemy, damage, id, dir, crit = false, freeze = 0) {
+        if (!enemy.hit(damage, id, dir, freeze)) return false;
         this.emit('hit');
         this.freeze = Math.max(this.freeze, HITSTOP);
         if (crit) this.addShake(2);

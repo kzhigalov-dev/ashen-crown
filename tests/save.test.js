@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Save, defaultProfile, SAVE_KEY } from '../js/systems/Save.js';
 import { memoryStorage } from './helpers.js';
 
-const sword = { slot: 'weapon', rarity: 'rare', tier: 1, name: 'Редкий меч', stats: { damage: 5, crit: 3 }, classId: 'swordsman' };
+const sword = { slot: 'weapon', rarity: 'rare', tier: 1, name: 'Редкий меч', stats: { damage: 5, crit: 3 }, classId: 'swordsman', kind: 'sword' };
 const armor = { slot: 'armor', rarity: 'common', tier: 1, name: 'Обычный доспех', stats: { hp: 15 } };
 
 function filledProfile() {
@@ -88,6 +88,16 @@ test('испорченный предмет — сохранения нет', ()
     assert.equal(loadCorrupted((data) => { data.inventory[0].stats = { luck: 5 }; }), null);
     assert.equal(loadCorrupted((data) => { data.equipped.weapon.slot = 'armor'; }), null);
     assert.equal(loadCorrupted((data) => { data.inventory = 'пусто'; }), null);
+});
+
+test('оружие неизвестного вида или чужого класса — сохранения нет', () => {
+    assert.equal(loadCorrupted((data) => { data.equipped.weapon.kind = 'scythe'; }), null);
+    assert.equal(loadCorrupted((data) => { delete data.equipped.weapon.kind; }), null);
+    assert.equal(loadCorrupted((data) => { data.equipped.weapon.kind = 'bow'; }), null, 'лук у мечника');
+});
+
+test('сохранение прежней версии не читается', () => {
+    assert.equal(loadCorrupted((data) => { data.version = 1; }), null);
 });
 
 test('clear стирает сохранение', () => {

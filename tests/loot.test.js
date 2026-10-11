@@ -37,14 +37,36 @@ test('обычное оружие леса: только базовый урон
     const item = generateItem({ locationId: 'forest', classId: 'swordsman', rng: seq(0, 0) });
     assert.deepEqual(item, {
         slot: 'weapon', rarity: 'common', tier: 1, name: 'Обычный меч',
-        stats: { damage: 4 }, classId: 'swordsman',
+        stats: { damage: 4 }, classId: 'swordsman', kind: 'sword',
     });
 });
 
 test('оружие называется по классу героя', () => {
     const name = (classId) => generateItem({ locationId: 'forest', classId, rng: seq(0, 0) }).name;
     assert.equal(name('archer'), 'Обычный лук');
-    assert.equal(name('mage'), 'Обычный посох');
+    assert.equal(name('mage'), 'Обычный посох огня');
+});
+
+test('вид оружия выбирается случайно, название согласовано по роду', () => {
+    // Числа по порядку: редкость, слот (оружие), вид.
+    const make = (rarity, kind) => generateItem({ locationId: 'forest', classId: 'swordsman', rng: seq(rarity, 0, kind) });
+    assert.equal(make(0, 0.4).kind, 'axe');
+    assert.equal(make(0, 0.4).name, 'Обычная секира');
+    assert.equal(make(0.75, 0.4).name, 'Редкая секира');
+    assert.equal(make(0, 0.9).kind, 'spear');
+    assert.equal(make(0, 0.9).name, 'Обычное копьё');
+    assert.equal(make(0.96, 0.9).name, 'Эпическое копьё');
+    assert.equal(generateItem({ locationId: 'forest', classId: 'archer', rng: seq(0, 0, 0.9) }).name, 'Обычный короткий лук');
+});
+
+test('за много бросков выпадают все три вида оружия класса', () => {
+    const rng = lcg(21);
+    const kinds = new Set();
+    for (let i = 0; i < 300; i++) {
+        const item = generateItem({ locationId: 'forest', classId: 'mage', rng });
+        if (item.slot === 'weapon') kinds.add(item.kind);
+    }
+    assert.deepEqual([...kinds].sort(), ['fireStaff', 'iceStaff', 'stormStaff']);
 });
 
 test('эпический доспех: здоровье ×1,7 и два разных случайных свойства', () => {
@@ -101,8 +123,13 @@ test('оружие всегда для класса героя', () => {
     const rng = lcg(5);
     for (let i = 0; i < 500; i++) {
         const item = generateItem({ locationId: 'dungeon', classId: 'archer', rng });
-        if (item.slot === 'weapon') assert.equal(item.classId, 'archer');
-        else assert.equal(item.classId, undefined);
+        if (item.slot === 'weapon') {
+            assert.equal(item.classId, 'archer');
+            assert.ok(['bow', 'crossbow', 'shortbow'].includes(item.kind));
+        } else {
+            assert.equal(item.classId, undefined);
+            assert.equal(item.kind, undefined);
+        }
     }
 });
 

@@ -1,13 +1,14 @@
 import { touchesTile } from '../Collision.js';
 import { SOLID } from '../Level.js';
-import { PROJECTILES } from '../data/classes.js';
+import { PROJECTILES } from '../data/weapons.js';
 
 let nextProjectileId = 1;
 
 // Стрела или магический шар. x, y при создании — центр снаряда.
 export class Projectile {
-    // target — точка {x, y}, в которую летит прицельный снаряд.
-    constructor(kind, x, y, dir, damage, target = null) {
+    // target — точка {x, y}, в которую летит прицельный снаряд;
+    // lift — своя начальная скорость вверх (для стрел, пущенных навесом).
+    constructor(kind, x, y, dir, damage, target = null, lift = null) {
         const def = PROJECTILES[kind];
         this.kind = kind;
         this.sprite = def.sprite;
@@ -17,7 +18,7 @@ export class Projectile {
         this.y = y - def.h / 2;
         this.dir = dir;
         this.vx = dir * def.speed;
-        this.vy = -def.lift;
+        this.vy = -(lift ?? def.lift);
         if (def.aimed && target) {
             // Скорость направлена в цель и по величине равна speed.
             const dx = target.x - x;
@@ -29,6 +30,7 @@ export class Projectile {
         }
         this.gravity = def.gravity;
         this.pierce = def.pierce;
+        this.stun = def.stun ?? 0;   // на сколько секунд замораживает цель
         this.life = def.life;
         this.damage = damage;
         // Номер попадания: пробивающая стрела ранит каждого врага один раз.

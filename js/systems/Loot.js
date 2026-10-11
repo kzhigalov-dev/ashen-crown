@@ -1,7 +1,9 @@
 import {
-    RARITIES, RARITY_WEIGHTS, LOCATION_TIER, TIER_MULT, SLOTS, WEAPON_NAMES, ITEM_NAMES,
+    RARITIES, RARITY_WEIGHTS, LOCATION_TIER, TIER_MULT, SLOTS, ITEM_NAMES,
     STATS, STAT_ORDER, SLOT_BASE_STAT, AFFIX_SCALE, AMULET_SCALE, DROP_CHANCE, BOSS_MIN_RARITY,
 } from '../data/items.js';
+import { CLASSES } from '../data/classes.js';
+import { WEAPONS } from '../data/weapons.js';
 
 // Везде rng — функция, возвращающая число от 0 (включительно) до 1.
 // В игре это Math.random, в тестах — предсказуемая подмена.
@@ -23,12 +25,14 @@ export function rollRarity(weights, rng, minIndex = 0) {
     return allowed.length - 1;
 }
 
-// Создаёт предмет. Оружие всегда подходит классу героя.
+// Создаёт предмет. Оружие всегда подходит классу героя; его вид (меч, секира,
+// копьё…) выбирается случайно — от вида зависят атака и способность.
 export function generateItem({ locationId, classId, rng, minRarity = 0 }) {
     const weights = RARITY_WEIGHTS[locationId] ?? RARITY_WEIGHTS.forest;
     const tier = LOCATION_TIER[locationId] ?? 1;
     const rarity = RARITIES[rollRarity(weights, rng, minRarity)];
     const slot = pick(SLOTS, rng);
+    const weapon = slot === 'weapon' ? WEAPONS[pick(CLASSES[classId].weapons, rng)] : null;
     const scale = TIER_MULT[tier] * rarity.mult;
 
     const stats = {};
@@ -43,10 +47,14 @@ export function generateItem({ locationId, classId, rng, minRarity = 0 }) {
         stats[stat] = Math.max(1, Math.round(STATS[stat].base * scale * AFFIX_SCALE));
     }
 
-    const noun = slot === 'weapon' ? WEAPON_NAMES[classId] : ITEM_NAMES[slot];
-    const item = { slot, rarity: rarity.id, tier, name: `${rarity.name} ${noun}`, stats };
-    if (slot === 'weapon') item.classId = classId;
-    return item;
+    if (!weapon) {
+        return { slot, rarity: rarity.id, tier, name: `${rarity.forms.m} ${ITEM_NAMES[slot]}`, stats };
+    }
+    return {
+        slot, rarity: rarity.id, tier,
+        name: `${rarity.forms[weapon.gender]} ${weapon.name}`,
+        stats, classId, kind: weapon.id,
+    };
 }
 
 // Что выпало из врага: предмет или null. С босса предмет гарантирован.

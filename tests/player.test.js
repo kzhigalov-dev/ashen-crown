@@ -4,6 +4,7 @@ import { Player } from '../js/entities/Player.js';
 import { Level } from '../js/Level.js';
 import { STEP, JUMP_SPEED } from '../js/data/constants.js';
 import { CLASSES } from '../js/data/classes.js';
+import { WEAPONS } from '../js/data/weapons.js';
 
 const flat = new Level({
     id: 'flat',
@@ -239,7 +240,7 @@ test('лучник: стрела летит в сторону взгляда', (
 test('маг: шар тратит 12 маны, без маны атаки нет', () => {
     const player = settledAs('mage');
     player.update(STEP, HOLD_ATTACK, flat);
-    assert.equal(player.takeActions()[0].kind, 'bolt');
+    assert.equal(player.takeActions()[0].kind, 'flame');
     assert.equal(player.mana, 88);
 
     const empty = settledAs('mage');
@@ -409,4 +410,105 @@ test('без шанса крита случай не расходуется', ()
     player.update(STEP, HOLD_ATTACK, flat);
     assert.equal(calls, 0);
     assert.equal(player.takeActions()[0].crit, false);
+});
+
+// ---------- Виды оружия ----------
+
+function armed(kind, bonus = {}) {
+    const weapon = WEAPONS[kind];
+    const player = new Player(CLASSES[weapon.classId], { weapon, bonus, rng: () => 0.99 });
+    player.placeAt(flat.spawn);
+    player.update(STEP, NONE, flat);
+    player.takeActions();
+    return player;
+}
+
+test('без указанного оружия герой берёт оружие класса по умолчанию', () => {
+    assert.equal(new Player(CLASSES.archer).weapon.id, 'bow');
+    assert.equal(armed('axe').weapon.id, 'axe');
+});
+
+test('секира: удар сильнее и реже, способность — круговой удар вокруг героя', () => {
+    const player = armed('axe');
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(player.takeActions()[0].damage, 24);
+    assert.ok(Math.abs(player.attackCooldown - 0.7) < 1e-9);
+    steps(player, flat, 50);
+    player.takeActions();
+    player.update(STEP, PRESS_ABILITY, flat);
+    const [whirl] = player.takeActions();
+    assert.equal(whirl.type, 'blast');
+    assert.equal(whirl.effect, 'whirl');
+    assert.equal(whirl.radius, 30);
+    assert.equal(player.dashTime, 0, 'рывка нет — это способность меча');
+});
+
+test('копьё: достаёт дальше меча, способность — бросок, пробивающий насквозь', () => {
+    const player = armed('spear');
+    player.update(STEP, HOLD_ATTACK, flat);
+    const [thrust] = player.takeActions();
+    assert.equal(thrust.box.w, 38);
+    assert.equal(thrust.damage, 11);
+    steps(player, flat, 30);
+    player.takeActions();
+    player.update(STEP, PRESS_ABILITY, flat);
+    const [thrown] = player.takeActions();
+    assert.deepEqual({ type: thrown.type, kind: thrown.kind, damage: thrown.damage }, { type: 'projectile', kind: 'spear', damage: 28 });
+});
+
+test('арбалет: залп — три болта на разной высоте', () => {
+    const player = armed('crossbow');
+    player.update(STEP, PRESS_ABILITY, flat);
+    const shots = player.takeActions();
+    assert.equal(shots.length, 3);
+    assert.ok(shots.every((shot) => shot.kind === 'quarrel' && shot.damage === 14));
+    assert.equal(new Set(shots.map((shot) => shot.y)).size, 3);
+    assert.deepEqual(player.events.filter((name) => name === 'shot').length, 1, 'звук выстрела один');
+});
+
+test('короткий лук: стреляет вдвое чаще; дождь стрел — пять стрел с разной дугой', () => {
+    const player = armed('shortbow');
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.ok(Math.abs(player.attackCooldown - 0.25) < 1e-9);
+    player.takeActions();
+    player.update(STEP, PRESS_ABILITY, flat);
+    const rain = player.takeActions();
+    assert.equal(rain.length, 5);
+    assert.ok(rain.every((shot) => shot.kind === 'lob'));
+    assert.deepEqual(rain.map((shot) => shot.lift), [120, 170, 220, 270, 320]);
+    assert.equal(new Set(rain.map((shot) => shot.y)).size, 1, 'вылетают из одной точки');
+});
+
+test('посох льда: осколок дешевле, волна замораживает', () => {
+    const player = armed('iceStaff');
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(player.takeActions()[0].kind, 'shard');
+    assert.equal(player.mana, 91);
+    player.update(STEP, PRESS_ABILITY, flat);
+    const [nova] = player.takeActions();
+    assert.equal(nova.effect, 'frost');
+    assert.equal(nova.stun, 1.6);
+    assert.equal(nova.radius, 54);
+});
+
+test('посох бури: способность — цепная молния', () => {
+    const player = armed('stormStaff');
+    player.update(STEP, PRESS_ABILITY, flat);
+    const [chain] = player.takeActions();
+    assert.equal(chain.type, 'chain');
+    assert.equal(chain.damage, 22);
+    assert.equal(chain.targets, 4);
+    assert.equal(chain.range, 120);
+    assert.equal(player.mana, 60);
+    assert.ok(player.events.includes('chain'));
+});
+
+test('крит залпа бросается один раз на все снаряды', () => {
+    let calls = 0;
+    const player = new Player(CLASSES.archer, { weapon: WEAPONS.crossbow, bonus: { crit: 50 }, rng: () => { calls++; return 0.2; } });
+    player.placeAt(flat.spawn);
+    player.update(STEP, PRESS_ABILITY, flat);
+    const shots = player.takeActions();
+    assert.equal(calls, 1);
+    assert.ok(shots.every((shot) => shot.crit && shot.damage === 28));
 });

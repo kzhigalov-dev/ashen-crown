@@ -1,14 +1,15 @@
 // Снаряжение: редкости, свойства, названия, шансы выпадения.
 
 // Порядок важен: индекс в массиве — «уровень» редкости.
+//   forms   — название по родам: «редкий меч», «редкая секира», «редкое копьё»;
 //   mult    — множитель чисел предмета;
 //   affixes — сколько случайных свойств добавляется к базовому;
 //   scrap   — сколько золота даёт разбор.
 export const RARITIES = [
-    { id: 'common', name: 'Обычный', mult: 1.0, affixes: 0, scrap: 2, color: '#b9ad98' },
-    { id: 'rare', name: 'Редкий', mult: 1.3, affixes: 1, scrap: 6, color: '#5a8cff' },
-    { id: 'epic', name: 'Эпический', mult: 1.7, affixes: 2, scrap: 15, color: '#c08bff' },
-    { id: 'legendary', name: 'Легендарный', mult: 2.2, affixes: 3, scrap: 40, color: '#ffb23e' },
+    { id: 'common', forms: { m: 'Обычный', f: 'Обычная', n: 'Обычное' }, mult: 1.0, affixes: 0, scrap: 2, color: '#b9ad98' },
+    { id: 'rare', forms: { m: 'Редкий', f: 'Редкая', n: 'Редкое' }, mult: 1.3, affixes: 1, scrap: 6, color: '#5a8cff' },
+    { id: 'epic', forms: { m: 'Эпический', f: 'Эпическая', n: 'Эпическое' }, mult: 1.7, affixes: 2, scrap: 15, color: '#c08bff' },
+    { id: 'legendary', forms: { m: 'Легендарный', f: 'Легендарная', n: 'Легендарное' }, mult: 2.2, affixes: 3, scrap: 40, color: '#ffb23e' },
 ];
 
 // Веса редкости по локациям: [обычный, редкий, эпический, легендарный].
@@ -25,8 +26,7 @@ export const TIER_MULT = { 1: 1, 2: 1.5, 3: 2.2 };
 export const SLOTS = ['weapon', 'armor', 'amulet'];
 export const SLOT_NAMES = { weapon: 'Оружие', armor: 'Броня', amulet: 'Амулет' };
 
-// Оружие у каждого класса своё.
-export const WEAPON_NAMES = { swordsman: 'меч', archer: 'лук', mage: 'посох' };
+// Названия брони и амулета. Виды оружия со своими названиями — в data/weapons.js.
 export const ITEM_NAMES = { armor: 'доспех', amulet: 'амулет' };
 
 // Свойства предметов. base — значение для обычного предмета первой локации.

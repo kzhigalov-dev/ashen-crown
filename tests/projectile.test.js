@@ -23,7 +23,7 @@ function fly(projectile, count) {
 }
 
 test('снаряд создаётся по центру точки и летит в сторону dir', () => {
-    const bolt = new Projectile('bolt', 50, 40, 1, 16);
+    const bolt = new Projectile('flame', 50, 40, 1, 16);
     assert.equal(bolt.x, 47);
     assert.equal(bolt.y, 37);
     fly(bolt, 18);
@@ -33,7 +33,7 @@ test('снаряд создаётся по центру точки и летит
 });
 
 test('снаряд влево летит влево', () => {
-    const bolt = new Projectile('bolt', 100, 40, -1, 16);
+    const bolt = new Projectile('flame', 100, 40, -1, 16);
     fly(bolt, 10);
     assert.ok(bolt.x < 97);
 });
@@ -49,14 +49,14 @@ test('стрела сначала поднимается, потом снижа�
 });
 
 test('снаряд гибнет о стену', () => {
-    const bolt = new Projectile('bolt', 100, 40, 1, 16);
+    const bolt = new Projectile('flame', 100, 40, 1, 16);
     fly(bolt, 60);
     assert.equal(bolt.dead, true);
     assert.ok(bolt.x + bolt.w >= 144 && bolt.x < 152, `остановился у стены: ${bolt.x}`);
 });
 
 test('снаряд гибнет по времени жизни', () => {
-    const bolt = new Projectile('bolt', 20, 8, 1, 16);
+    const bolt = new Projectile('flame', 20, 8, 1, 16);
     bolt.vx = 0;
     fly(bolt, 71);
     assert.equal(bolt.dead, false);
