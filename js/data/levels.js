@@ -257,13 +257,24 @@ const DUNGEON_ARENA = [
     G,
 ];
 
-// theme — оформление локации: цвета неба и фона, вид силуэтов на фоне
-// и перекраска тайлов земли (ключи — символы палитры из data/sprites.js).
+// boss — кто стережёт локацию (id из data/enemies.js).
+// theme — оформление локации:
+//   skyTop, skyBottom — градиент неба; sky — его средний тон (запасной);
+//   far, mid, near    — три слоя силуэтов на фоне, от дальнего к ближнему;
+//   backdrop          — вид силуэтов: trees (ели) или columns (колонны);
+//   moon              — цвет луны или null; fog — цвет тумана;
+//   particles         — что летает в воздухе: ash (пепел), dust (пыль), embers (искры);
+//   tiles             — перекраска тайлов земли (ключи — символы палитры из data/sprites.js).
 export const LEVELS = [
     {
         id: 'forest',
         name: 'Проклятый лес',
-        theme: { sky: '#141b2b', far: '#1a2c33', near: '#21403a', backdrop: 'trees', tiles: null },
+        boss: 'treant',
+        theme: {
+            sky: '#141b2b', skyTop: '#0b101c', skyBottom: '#26384c',
+            far: '#15242b', mid: '#1a2f36', near: '#21403a',
+            backdrop: 'trees', moon: '#d9e4d2', fog: '#8fb0b0', particles: 'ash', tiles: null,
+        },
         segments: [
             FOREST_START, FOREST_PLATFORMS, FOREST_PIT, FOREST_SPIKES,
             FOREST_STAIRS, FOREST_CHASM, FOREST_DESCENT, FOREST_FINALE, FOREST_ARENA,
@@ -272,8 +283,11 @@ export const LEVELS = [
     {
         id: 'castle',
         name: 'Разрушенный замок',
+        boss: 'knight',
         theme: {
-            sky: '#16161f', far: '#20212c', near: '#2b2d3a', backdrop: 'columns',
+            sky: '#16161f', skyTop: '#0c0c14', skyBottom: '#2c2e44',
+            far: '#191a24', mid: '#21232f', near: '#2b2d3a',
+            backdrop: 'columns', moon: '#c9cde0', fog: '#9aa0b5', particles: 'dust',
             tiles: { G: '#9aa0ad', g: '#6a6f7d', d: '#4a4d5a', D: '#5f6372', e: '#3a3c48' },
         },
         segments: [
@@ -284,8 +298,11 @@ export const LEVELS = [
     {
         id: 'dungeon',
         name: 'Пылающее подземелье',
+        boss: 'demon',
         theme: {
-            sky: '#1a0f12', far: '#2a1416', near: '#3d1a18', backdrop: 'columns',
+            sky: '#1a0f12', skyTop: '#0f0809', skyBottom: '#521812',
+            far: '#200f11', mid: '#2c1315', near: '#3d1a18',
+            backdrop: 'columns', moon: null, fog: '#e2572b', particles: 'embers',
             tiles: { G: '#a8492e', g: '#6e2f22', d: '#33201f', D: '#4a2a26', e: '#221514' },
         },
         segments: [

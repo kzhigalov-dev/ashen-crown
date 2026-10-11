@@ -926,3 +926,22 @@ test('гибель героя: мир замирает, враги не доби
     untilOver(game);
     assert.equal(game.state, 'dead');
 });
+
+test('cleared: число пройденных локаций, до загрузки берётся из сохранения', () => {
+    const { game, storage } = saved('swordsman', () => 0.5, [arenaDef, arenaDef]);
+    assert.equal(game.cleared, 0);
+    game.playLevel(0);
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.cleared, 1);
+    game.playLevel(1);
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.cleared, 2, 'не больше числа локаций');
+
+    const fresh = new Game({ levels: [arenaDef, arenaDef], input: new InputHandler(fakeTarget()), save: new Save(storage) });
+    assert.equal(fresh.profile, null);
+    assert.equal(fresh.cleared, 2);
+    const empty = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()) });
+    assert.equal(empty.cleared, 0);
+});

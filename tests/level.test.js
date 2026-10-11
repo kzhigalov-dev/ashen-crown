@@ -125,6 +125,7 @@ test('босс стоит в последнем сегменте, портал �
         const level = new Level(def);
         const boss = level.enemies.at(-1);
         assert.ok(boss.x >= level.width - 20 * 16, `${def.id}: босс в арене`);
+        assert.equal(boss.type, def.boss, `${def.id}: поле boss совпадает с картой`);
         assert.ok(level.exit.x > boss.x, `${def.id}: портал за боссом`);
     }
 });

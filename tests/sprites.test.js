@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PALETTE, SPRITES } from '../js/data/sprites.js';
+import { PALETTE, SPRITES, GLYPHS } from '../js/data/sprites.js';
 
 const SIZES = {
     heroIdle: [12, 22],
@@ -32,6 +32,8 @@ const SIZES = {
     imp2: [12, 12],
     treant: [16, 22],
     demon: [20, 20],
+    heart: [7, 6],
+    crown: [21, 12],
 };
 
 test('есть все спрайты', () => {
@@ -50,3 +52,14 @@ for (const [name, [width, height]] of Object.entries(SIZES)) {
         });
     });
 }
+
+test('знаки мелкого шрифта: 3×5, есть все цифры', () => {
+    for (let digit = 0; digit <= 9; digit++) assert.ok(GLYPHS[digit], `цифра ${digit}`);
+    for (const [char, rows] of Object.entries(GLYPHS)) {
+        assert.equal(rows.length, 5, `«${char}»: высота`);
+        for (const line of rows) {
+            assert.equal(line.length, 3, `«${char}»: ширина`);
+            assert.match(line, /^[#.]+$/, `«${char}»: только # и точка`);
+        }
+    }
+});

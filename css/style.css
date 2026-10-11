@@ -1,18 +1,33 @@
+/* ------------------------------------------------------------------
+   Пепельная корона — оформление экранов.
+   Палитра: сажа, зола, пергамент, тлеющий уголь, старое золото.
+   Шрифты: вязь для заголовков, антиква для сюжета, пиксельный для интерфейса.
+   Размеры заданы в em: текст растёт вместе с игровым полем.
+   ------------------------------------------------------------------ */
+
 :root {
     --scale: 2;
-    --ink: #e8dcc4;
-    --muted: #b9ad98;
-    --ash: #0b0a10;
-    --panel: #2b2433;
-    --border: #6b5a4a;
-    --gold: #e8b923;
+
+    --soot: #0d0b10;
+    --ash: #2a2630;
+    --ash-light: #3a3541;
+    --frame: #5a5360;
+    --cinder: #8f8794;
+    --parchment: #e6dcc6;
+    --ember: #e2572b;
+    --gold: #d8a531;
+    --gold-light: #ffe27a;
+
+    --display: 'Ruslan Display', 'Palatino Linotype', Palatino, Georgia, serif;
+    --text: 'Old Standard TT', 'Palatino Linotype', Palatino, Georgia, serif;
+    --ui: 'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 * {
     box-sizing: border-box;
 }
 
-/* Атрибут hidden должен побеждать display: flex у экранов. */
+/* Атрибут hidden должен побеждать display у экранов. */
 [hidden] {
     display: none !important;
 }
@@ -27,16 +42,17 @@ body {
     display: grid;
     place-items: center;
     overflow: hidden;
-    background: var(--ash);
-    color: var(--ink);
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    background: var(--soot);
+    color: var(--parchment);
+    font-family: var(--ui);
 }
 
-/* Размер и --scale выставляет Renderer.resize(); текст растёт вместе с полем. */
+/* Размер и --scale выставляет Renderer.resize(). */
 #stage {
     position: relative;
     width: 480px;
     height: 270px;
+    overflow: hidden;
     font-size: calc(6.5px * var(--scale));
 }
 
@@ -44,100 +60,331 @@ body {
     display: block;
     width: 100%;
     height: 100%;
-    background: #141b2b;
+    background: var(--soot);
     image-rendering: pixelated;
 }
+
+/* ---------- Текст ---------- */
+
+h1,
+h2,
+h3,
+p,
+dl {
+    margin: 0;
+}
+
+/* Заголовки «прогорают»: под ними пробегает тлеющая линия и остывает в золото. */
+h1,
+h2 {
+    font-family: var(--display);
+    font-weight: normal;
+    color: var(--gold);
+    text-shadow: 0.06em 0.08em 0 var(--soot);
+}
+
+h1::after,
+h2::after {
+    content: '';
+    display: block;
+    width: 100%;
+    max-width: 7em;
+    height: 0.07em;
+    margin-top: 0.3em;
+    background: linear-gradient(90deg, var(--ember), var(--gold) 55%, transparent);
+    transform-origin: left;
+    animation: burn 0.9s ease-out both;
+}
+
+h2 {
+    font-size: 2.3em;
+    line-height: 1.05;
+}
+
+.logo {
+    font-size: 4.3em;
+    line-height: 0.95;
+    color: var(--gold-light);
+    text-shadow: 0.05em 0.07em 0 #5a2a12, 0 0 0.6em rgba(226, 87, 43, 0.35);
+}
+
+.tagline {
+    font-family: var(--text);
+    font-style: italic;
+    font-size: 1.25em;
+    color: var(--cinder);
+}
+
+.eyebrow {
+    font-size: 0.8em;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cinder);
+}
+
+.story {
+    max-width: 27em;
+    min-height: 6.6em;
+    font-family: var(--text);
+    font-size: 1.3em;
+    line-height: 1.55;
+    white-space: pre-line;
+}
+
+.prose {
+    max-width: 30em;
+    font-family: var(--text);
+    font-size: 1.15em;
+    line-height: 1.5;
+}
+
+.hint {
+    max-width: 34em;
+    font-size: 0.85em;
+    line-height: 1.5;
+    color: var(--cinder);
+}
+
+.hint.warn {
+    color: #f28a2e;
+}
+
+.footnote {
+    margin-top: 1em;
+    font-size: 0.75em;
+    color: var(--cinder);
+}
+
+kbd {
+    display: inline-block;
+    min-width: 1.7em;
+    padding: 0.1em 0.4em;
+    border: 0.12em solid var(--frame);
+    border-bottom-width: 0.25em;
+    background: var(--ash);
+    color: var(--parchment);
+    font: inherit;
+    font-size: 0.9em;
+    text-align: center;
+}
+
+/* ---------- Экраны ---------- */
 
 .screen {
     position: absolute;
     inset: 0;
     display: flex;
     flex-direction: column;
+    gap: 0.8em;
+    animation: screen-in 0.35s ease-out both;
+}
+
+/* Колонка слева: справа остаётся видна живая сцена. */
+.screen.left {
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2em 0 2em 6.5%;
+    background: linear-gradient(90deg, rgba(13, 11, 16, 0.94) 0%, rgba(13, 11, 16, 0.82) 36%, rgba(13, 11, 16, 0) 66%);
+}
+
+.screen.left > * {
+    max-width: 52%;
+}
+
+/* Лист по центру поверх затемнённой игры. */
+.screen.center {
     align-items: center;
     justify-content: center;
-    gap: 0.9em;
-    padding: 2em;
+    background: rgba(13, 11, 16, 0.72);
+}
+
+/* На всю ширину: выбор класса, карта, снаряжение. */
+.screen.wide {
+    align-items: center;
+    justify-content: center;
+    padding: 1.5em 2.5em;
     text-align: center;
-    background: rgba(11, 10, 16, 0.86);
+    background: rgba(13, 11, 16, 0.86);
 }
 
-.screen h1,
-.screen h2 {
-    margin: 0;
-    font-size: 2.4em;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--gold);
-    text-shadow: 0.08em 0.08em 0 #5a2a12;
+.screen.wide h2::after {
+    margin-inline: auto;
+    background: linear-gradient(90deg, transparent, var(--ember), var(--gold), transparent);
+    transform-origin: center;
 }
 
-.screen p {
-    max-width: 34em;
-    margin: 0;
-    line-height: 1.5;
+/* Лист со ступенчатыми «пиксельными» углами. */
+.sheet {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.7em;
+    min-width: 22em;
+    max-width: 30em;
+    padding: 1.6em 2em;
+    border: 0.15em solid var(--frame);
+    background: rgba(29, 25, 34, 0.96);
+    clip-path: polygon(
+        0 0.5em, 0.5em 0.5em, 0.5em 0,
+        calc(100% - 0.5em) 0, calc(100% - 0.5em) 0.5em, 100% 0.5em,
+        100% calc(100% - 0.5em), calc(100% - 0.5em) calc(100% - 0.5em), calc(100% - 0.5em) 100%,
+        0.5em 100%, 0.5em calc(100% - 0.5em), 0 calc(100% - 0.5em)
+    );
 }
+
+.row {
+    display: flex;
+    gap: 1em;
+    align-items: center;
+}
+
+/* ---------- Кнопки ---------- */
 
 button {
-    min-width: 14em;
+    min-width: 13em;
     padding: 0.5em 1.2em;
-    border: 0.15em solid var(--border);
-    background: var(--panel);
-    color: var(--ink);
+    border: 0.15em solid var(--frame);
+    background: var(--ash);
+    color: var(--parchment);
     font: inherit;
+    font-size: 1em;
     cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
 button:hover {
-    background: #3a3046;
+    background: var(--ash-light);
 }
 
-button:focus-visible {
-    outline: 0.2em solid var(--gold);
-    outline-offset: 0.15em;
+/* Фокус — это «выбранный пункт» меню, поэтому он виден и при переходе
+   стрелками, и после щелчка мышью. */
+button:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: var(--ash-light);
+    color: var(--gold-light);
+    box-shadow: 0 0 0 0.15em var(--soot), 0 0 0 0.3em var(--ember);
 }
 
-.hud-button {
-    position: absolute;
-    top: 0.6em;
-    right: 0.6em;
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+button.quiet {
     min-width: 0;
-    padding: 0.3em 0.7em;
-    font-size: 0.8em;
-    opacity: 0.85;
+    border-color: transparent;
+    background: transparent;
+    color: var(--cinder);
 }
+
+button.quiet:hover,
+button.quiet:focus {
+    color: var(--parchment);
+    box-shadow: none;
+    border-color: var(--frame);
+}
+
+/* Главное меню: строки без рамок, выбранная отмечена тлеющим ромбом. */
+.menu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1em;
+    margin-top: 0.8em;
+}
+
+.menu button {
+    position: relative;
+    min-width: 0;
+    padding: 0.22em 0.4em 0.22em 1.3em;
+    border: 0;
+    background: transparent;
+    font-size: 1.35em;
+    text-align: left;
+    color: rgba(230, 220, 198, 0.72);
+    transition: color 0.12s, transform 0.12s;
+}
+
+.menu button::before {
+    content: '◆';
+    position: absolute;
+    left: 0;
+    color: var(--ember);
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.menu button:hover,
+.menu button:focus {
+    background: transparent;
+    box-shadow: none;
+    color: var(--gold-light);
+    transform: translateX(0.3em);
+}
+
+.menu button:hover::before,
+.menu button:focus::before {
+    opacity: 1;
+}
+
+/* ---------- Корона ---------- */
+
+.crown {
+    width: 8.4em;      /* спрайт 21×12, увеличен без сглаживания */
+    height: 4.8em;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 0.6em rgba(226, 87, 43, 0.35));
+}
+
+.crown--small {
+    width: 5.25em;
+    height: 3em;
+}
+
+/* ---------- Управление и настройки ---------- */
 
 .keys {
     display: grid;
-    grid-template-columns: auto auto;
-    gap: 0.2em 1.2em;
-    margin: 0.6em 0 0;
-    font-size: 0.8em;
-    text-align: left;
-    color: var(--muted);
-}
-
-.keys dt {
-    color: var(--ink);
+    grid-template-columns: auto 1fr;
+    gap: 0.5em 1.4em;
+    align-items: center;
 }
 
 .keys dd {
     margin: 0;
+    color: var(--cinder);
 }
 
-.volume {
-    display: flex;
+.field {
+    display: grid;
+    grid-template-columns: 9em 12em;
+    gap: 1em;
     align-items: center;
-    gap: 0.8em;
-    font-size: 0.85em;
-    color: var(--muted);
 }
 
-.volume input {
-    width: 10em;
-    accent-color: var(--gold);
+.field.check {
+    grid-template-columns: auto 1fr;
+    cursor: pointer;
 }
 
-/* Экран выбора класса */
+input[type='range'],
+input[type='checkbox'] {
+    accent-color: var(--ember);
+}
+
+input[type='checkbox'] {
+    width: 1.2em;
+    height: 1.2em;
+}
+
+input:focus-visible {
+    outline: 0.15em solid var(--gold);
+    outline-offset: 0.2em;
+}
+
+/* ---------- Выбор класса ---------- */
+
 .class-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -150,63 +397,124 @@ button:focus-visible {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5em;
+    gap: 0.45em;
     min-width: 0;
-    padding: 1em 0.8em;
-    line-height: 1.4;
+    padding: 1em 0.9em;
+    line-height: 1.35;
+    background: rgba(29, 25, 34, 0.94);
 }
 
 .class-card strong {
-    font-size: 1.3em;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-family: var(--display);
+    font-size: 1.6em;
+    font-weight: normal;
     color: var(--gold);
 }
 
-.class-card small {
-    font-size: 0.8em;
-    color: var(--muted);
+.class-card span {
+    font-family: var(--text);
+    font-size: 1.05em;
 }
 
-/* Спрайт 12×22 увеличен без сглаживания. */
+.class-card small {
+    font-size: 0.78em;
+    color: var(--cinder);
+}
+
+/* Спрайт 12×22 увеличен без сглаживания; под ним полоска «земли». */
 .portrait {
     width: 3.6em;
     height: 6.6em;
+    border-bottom: 0.3em solid #4a3328;
     image-rendering: pixelated;
 }
 
-button.quiet {
-    min-width: 0;
-    border-color: transparent;
-    background: transparent;
-    color: var(--muted);
-}
+/* ---------- Карта ---------- */
 
-.hint {
-    font-size: 0.85em;
-    color: var(--muted);
-}
-
-.hint.warn {
-    color: #f28a2e;
-}
-
-/* Карта локаций */
-.map-list {
+.map-head {
     display: flex;
-    gap: 1em;
+    align-items: center;
+    gap: 1.2em;
+    width: 100%;
+    max-width: 58em;
+    text-align: left;
 }
 
-.map-list button {
-    min-width: 12em;
+.map-head h2::after {
+    margin-inline: 0;
+    background: linear-gradient(90deg, var(--ember), var(--gold) 55%, transparent);
+    transform-origin: left;
 }
 
-button:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
+.purse {
+    margin-left: auto;
+    font-size: 0.9em;
+    line-height: 1.6;
+    text-align: right;
+    color: var(--cinder);
 }
 
-/* Экран снаряжения: надетое, сумка, описание выбранного предмета */
+.purse strong {
+    color: var(--gold-light);
+}
+
+/* Три локации в ряд — это дорога: между карточками тянется пунктир. */
+.map-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.6em;
+    width: 100%;
+    max-width: 58em;
+}
+
+.place {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35em;
+    min-width: 0;
+    padding: 0.5em;
+    text-align: left;
+    background: rgba(29, 25, 34, 0.94);
+}
+
+.place:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: 1.6em;
+    border-top: 0.15em dashed var(--frame);
+}
+
+.place canvas {
+    width: 100%;
+    aspect-ratio: 120 / 68;
+    image-rendering: pixelated;
+}
+
+.place strong {
+    font-family: var(--display);
+    font-size: 1.25em;
+    font-weight: normal;
+    color: var(--gold);
+}
+
+.place small {
+    font-size: 0.8em;
+    color: var(--cinder);
+}
+
+.place.cleared small {
+    color: var(--gold);
+}
+
+.place:disabled canvas {
+    filter: grayscale(1) brightness(0.5);
+}
+
+/* ---------- Снаряжение ---------- */
+
 .equip {
     display: grid;
     grid-template-columns: 1fr 1.3fr 1.3fr;
@@ -217,12 +525,12 @@ button:disabled {
 }
 
 .equip h3 {
-    margin: 0 0 0.5em;
-    font-size: 1em;
+    margin-bottom: 0.5em;
+    font-size: 0.8em;
     font-weight: normal;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: var(--cinder);
 }
 
 .slots {
@@ -240,9 +548,9 @@ button:disabled {
 .item {
     min-width: 0;
     padding: 0.5em 0.3em;
-    border-color: var(--rarity, var(--border));
-    color: var(--rarity, var(--ink));
-    font-size: 0.8em;
+    border-color: var(--rarity, var(--frame));
+    color: var(--rarity, var(--parchment));
+    font-size: 0.85em;
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -254,16 +562,14 @@ button:disabled {
 
 .item.selected {
     background: #45395a;
-    outline: 0.15em solid var(--ink);
-    outline-offset: 0.1em;
 }
 
 .totals,
 .detail p {
-    margin: 0.6em 0 0;
-    font-size: 0.8em;
+    margin-top: 0.6em;
+    font-size: 0.85em;
     line-height: 1.6;
-    color: var(--muted);
+    color: var(--cinder);
 }
 
 .detail {
@@ -274,15 +580,17 @@ button:disabled {
 }
 
 .detail strong {
-    font-size: 1.1em;
-    color: var(--rarity, var(--ink));
+    font-family: var(--display);
+    font-size: 1.3em;
+    font-weight: normal;
+    color: var(--rarity, var(--parchment));
 }
 
 .detail ul {
     margin: 0;
     padding: 0;
     list-style: none;
-    font-size: 0.85em;
+    font-size: 0.9em;
     line-height: 1.6;
 }
 
@@ -299,7 +607,169 @@ button:disabled {
     width: 100%;
 }
 
-.screen p.story {
-    max-width: 40em;
-    line-height: 1.7;
+/* ---------- Итоги ---------- */
+
+.stats {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.25em 1.5em;
+    padding: 0.6em 0;
+    border-block: 0.1em solid var(--frame);
+}
+
+.stats dt {
+    color: var(--cinder);
+}
+
+.stats dd {
+    margin: 0;
+    text-align: right;
+    color: var(--gold-light);
+}
+
+/* ---------- Надписи поверх игры ---------- */
+
+#hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+#hud > * {
+    position: absolute;
+    left: 50%;
+    margin: 0;
+    transform: translateX(-50%);
+    text-align: center;
+    text-shadow: 0.08em 0.1em 0 var(--soot);
+}
+
+/* Название локации в начале уровня: появляется и тает. */
+.hud-card {
+    top: 26%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    white-space: nowrap;
+    animation: card 2.1s ease-in-out both;
+}
+
+.hud-card strong {
+    font-family: var(--display);
+    font-size: 2.8em;
+    font-weight: normal;
+    color: var(--gold-light);
+}
+
+/* Объявление о боссе. */
+.hud-banner {
+    top: 20%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    white-space: nowrap;
+    animation: screen-in 0.4s ease-out both;
+}
+
+.hud-banner strong {
+    font-family: var(--display);
+    font-size: 2.2em;
+    font-weight: normal;
+    color: var(--ember);
+}
+
+.hud-banner em {
+    font-family: var(--text);
+    font-size: 1.2em;
+}
+
+.hud-toast {
+    top: 12%;
+    padding: 0.2em 0.8em;
+    background: rgba(13, 11, 16, 0.7);
+    font-size: 0.95em;
+    white-space: nowrap;
+    animation: screen-in 0.25s ease-out both;
+}
+
+/* Записка у костра. */
+.hud-lore {
+    bottom: 13%;
+    width: 60%;
+    padding: 0.5em 1em;
+    border-left: 0.2em solid var(--ember);
+    background: rgba(13, 11, 16, 0.78);
+    font-family: var(--text);
+    font-style: italic;
+    font-size: 1.1em;
+    line-height: 1.45;
+    text-align: left !important;
+    animation: screen-in 0.5s ease-out both;
+}
+
+.hud-boss {
+    bottom: 6.6%;
+    font-family: var(--display);
+    font-size: 1.15em;
+    color: var(--parchment);
+    white-space: nowrap;
+}
+
+.hud-button {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    min-width: 0;
+    padding: 0.2em 0.6em;
+    font-size: 0.75em;
+    opacity: 0.8;
+}
+
+/* ---------- Движение ---------- */
+
+@keyframes burn {
+    from {
+        transform: scaleX(0);
+        filter: brightness(2.4);
+    }
+    60% {
+        filter: brightness(1.7);
+    }
+    to {
+        transform: scaleX(1);
+        filter: none;
+    }
+}
+
+@keyframes screen-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes card {
+    0% {
+        opacity: 0;
+        letter-spacing: 0.2em;
+    }
+    25%,
+    75% {
+        opacity: 1;
+        letter-spacing: 0;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Просьба системы «меньше движения»: без появлений и прогорания. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+    }
 }

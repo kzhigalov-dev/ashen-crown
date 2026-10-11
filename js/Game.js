@@ -92,6 +92,13 @@ export class Game {
         return this.save.load() !== null;
     }
 
+    // Сколько локаций пройдено — столько зубцов короны позолочено.
+    // Пока игра не загружена, берётся из сохранения.
+    get cleared() {
+        const profile = this.profile ?? this.save.load();
+        return profile ? Math.min(this.levels.length, profile.unlocked - 1) : 0;
+    }
+
     setState(state) {
         this.state = state;
         this.input.capture = state === 'playing';

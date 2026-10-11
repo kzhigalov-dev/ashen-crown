@@ -1,97 +1,138 @@
 import { SLOTS, SLOT_NAMES, STATS, STAT_ORDER, INVENTORY_SIZE } from '../data/items.js';
+import { ENEMIES } from '../data/enemies.js';
 import { rarityOf, dismantleValue } from '../systems/Loot.js';
-import { STORY } from '../data/story.js';
+import { PROLOGUE, STORY, EPILOGUE } from '../data/story.js';
 
-// HTML-экраны поверх игрового поля: меню, выбор класса, карта, снаряжение,
-// пауза, победа, поражение.
+const TYPE_SPEED = 48;                 // букв в секунду при «печати» сюжетного текста
+const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
+const TIPS = [
+    'Костёр полностью лечит — но только один раз за вылазку.',
+    'Метка на полу и мигание врага предупреждают об ударе: уходи заранее.',
+    'Снаряжение с врагов надевается на карте. Лишнее разбирай в золото.',
+    'Прыжок тем выше, чем дольше держишь клавишу.',
+];
+
+// Состояния игры и экраны, которые им соответствуют.
+const STATE_SCREENS = {
+    menu: 'menu', classSelect: 'class', map: 'map', equipment: 'equipment', story: 'story',
+    paused: 'paused', complete: 'complete', victory: 'victory', dead: 'dead',
+};
+// Страницы меню, у которых нет своего состояния игры.
+const PAGES = ['controls', 'settings', 'about', 'prologue'];
+
+const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+// HTML-экраны поверх игрового поля.
 export class Screens {
-    constructor(root) {
+    // art — источник картинок: portrait(classId), crown(cleared), thumbnail(levelDef).
+    constructor(root, art) {
         this.root = root;
-        const byId = (id) => root.getElementById(id);
-        this.screens = {
-            menu: byId('screen-menu'),
-            classSelect: byId('screen-class'),
-            map: byId('screen-map'),
-            story: byId('screen-story'),
-            victory: byId('screen-victory'),
-            equipment: byId('screen-equipment'),
-            paused: byId('screen-paused'),
-            complete: byId('screen-complete'),
-            dead: byId('screen-dead'),
-        };
-        this.pauseButton = byId('btn-pause');
-        this.byId = byId;
+        this.art = art;
+        this.byId = (id) => root.getElementById(id);
+        this.screens = {};
+        for (const name of [...Object.values(STATE_SCREENS), ...PAGES]) {
+            this.screens[name] = this.byId(`screen-${name}`);
+        }
+        this.pauseButton = this.byId('btn-pause');
         this.handlers = {};
-        // Выбранный предмет на экране снаряжения:
-        // { from: 'bag', index } или { from: 'slot', slot }.
-        this.selected = null;
+        this.game = null;
+        this.state = 'menu';
+        this.page = null;         // открытая страница меню (управление, настройки…)
+        this.prologueIndex = 0;
+        this.typing = null;       // «печатающийся» текст: { element, text, start, done }
+        this.selected = null;     // выбранный предмет: { from: 'bag', index } или { from: 'slot', slot }
+        this.reducedMotion = root.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     }
 
     // handlers — действия по значению data-action, а также
-    // play(index), equip(index), unequip(slot), dismantle(index), volume(value).
+    // play(index), equip(index), unequip(slot), dismantle(index),
+    // setting(key, value), sound(name), classes().
     bind(handlers) {
         this.handlers = handlers;
+        const actions = {
+            ...handlers,
+            new: () => this.openPrologue(),
+            begin: () => this.advance(() => handlers.begin()),
+            prologueNext: () => this.advance(() => this.nextPrologue()),
+            prologueSkip: () => this.closePrologue(),
+        };
         for (const button of this.root.querySelectorAll('[data-action]')) {
-            button.addEventListener('click', () => handlers[button.dataset.action]());
+            button.addEventListener('click', () => actions[button.dataset.action]());
         }
-        // Ползунки громкости в меню и в паузе управляют одним значением.
-        for (const slider of this.root.querySelectorAll('.volume-input')) {
-            slider.addEventListener('input', () => handlers.volume(Number(slider.value) / 100));
+        for (const button of this.root.querySelectorAll('[data-page]')) {
+            button.addEventListener('click', () => this.open(button.dataset.page));
         }
+        for (const button of this.root.querySelectorAll('[data-back]')) {
+            button.addEventListener('click', () => this.back());
+        }
+
+        this.byId('set-volume').addEventListener('input', (event) => handlers.setting('volume', event.target.value / 100));
+        this.byId('set-music').addEventListener('input', (event) => handlers.setting('music', event.target.value / 100));
+        this.byId('set-shake').addEventListener('change', (event) => handlers.setting('shake', event.target.checked));
+
+        // Звук нажатия для всех кнопок экранов.
+        this.root.addEventListener('click', (event) => {
+            if (event.target.closest?.('.screen button')) handlers.sound('confirm');
+        });
+        // Стрелки двигают выбор, Esc возвращает назад. Слушаем на этапе погружения,
+        // чтобы обработать Esc раньше игры: иначе она сняла бы паузу.
+        this.root.addEventListener('keydown', (event) => this.onKey(event), true);
+    }
+
+    onKey(event) {
+        const active = this.current();
+        if (!active) return;
+        if (event.code === 'Escape' && this.page) {
+            event.stopPropagation();
+            event.preventDefault();
+            if (this.page === 'prologue') this.closePrologue();
+            else this.back();
+            return;
+        }
+        const step = { ArrowDown: 1, ArrowUp: -1 }[event.code];
+        if (!step) return;
+        const items = [...active.querySelectorAll('button:not(:disabled):not([hidden]), input')];
+        if (items.length === 0) return;
+        event.preventDefault();
+        const index = items.indexOf(this.root.activeElement);
+        items[(index + step + items.length) % items.length].focus();
+        this.handlers.sound('ui');
+    }
+
+    // Экран, который сейчас показан.
+    current() {
+        return this.screens[this.page ?? STATE_SCREENS[this.state]] ?? null;
     }
 
     // Создаёт элемент с классом и текстом.
     el(tag, className = '', text = '') {
         const element = this.root.createElement(tag);
         if (className) element.className = className;
-        if (text) element.textContent = text;
+        if (text !== '') element.textContent = text;
         return element;
     }
 
-    // Строит карточки классов из данных.
-    //   portrait(id) — canvas со спрайтом героя; onPick(id) — выбор класса.
-    renderClasses(classes, order, portrait, onPick) {
-        const list = this.byId('class-list');
-        list.replaceChildren();
-        for (const id of order) {
-            const def = classes[id];
-            const card = this.el('button', 'class-card');
-
-            // Копия спрайта: один canvas нельзя вставить в страницу дважды.
-            const source = portrait(id);
-            const picture = this.el('canvas', 'portrait');
-            picture.width = source.width;
-            picture.height = source.height;
-            picture.getContext('2d').drawImage(source, 0, 0);
-            picture.setAttribute('aria-hidden', 'true');
-
-            const mana = def.maxMana > 0 ? ` · Мана ${def.maxMana}` : '';
-            card.append(
-                picture,
-                this.el('strong', '', def.name),
-                this.el('span', '', def.description),
-                this.el('small', '', `Здоровье ${def.maxHp}${mana} · J: ${def.attack.name} · K: ${def.ability.name}`)
-            );
-            card.addEventListener('click', () => onPick(id));
-            list.append(card);
-        }
+    // Копия картинки: один canvas нельзя вставить в страницу дважды.
+    copy(source, target = this.root.createElement('canvas')) {
+        target.width = source.width;
+        target.height = source.height;
+        target.getContext('2d').drawImage(source, 0, 0);
+        target.setAttribute('aria-hidden', 'true');
+        return target;
     }
 
+    // ---------- Показ экранов ----------
+
     onState(state, game) {
-        for (const [name, element] of Object.entries(this.screens)) {
-            element.hidden = name !== state;
-        }
-        this.pauseButton.hidden = state !== 'playing';
-        for (const element of this.root.querySelectorAll('[data-gold]')) {
-            element.textContent = game.gold;
-        }
-        for (const slider of this.root.querySelectorAll('.volume-input')) {
-            slider.value = Math.round(game.volume * 100);
-        }
+        this.state = state;
+        this.game = game;
+        this.page = null;
+        this.typing = null;
 
         if (state === 'menu') {
             this.byId('btn-continue').hidden = !game.hasSave;
             this.byId('save-warning').hidden = game.save.available;
+            this.copy(this.art.crown(game.cleared), this.byId('title-crown'));
         } else if (state === 'classSelect') {
             this.byId('reset-warning').hidden = !game.hasSave;
         } else if (state === 'map') {
@@ -100,36 +141,174 @@ export class Screens {
         } else if (state === 'equipment') {
             this.renderEquipment(game);
         } else if (state === 'story') {
+            this.byId('story-index').textContent = `Локация ${ROMAN[game.levelIndex]}`;
             this.byId('story-title').textContent = game.levelDef.name;
-            this.byId('story-text').textContent = STORY[game.levelDef.id] ?? '';
+            this.type(this.byId('story-text'), STORY[game.levelDef.id] ?? '');
+        } else if (state === 'complete') {
+            this.byId('complete-title').textContent = game.levelDef.name;
+            this.renderStats(this.byId('complete-stats'), game);
         } else if (state === 'victory') {
-            this.byId('victory-text').textContent = STORY.victory;
+            this.copy(this.art.crown(game.levels.length), this.byId('victory-crown'));
+            this.type(this.byId('victory-text'), EPILOGUE.join('\n\n'));
+            this.renderStats(this.byId('victory-stats'), game);
+        } else if (state === 'dead') {
+            this.byId('dead-tip').textContent = TIPS[(game.stats.hits + game.levelIndex) % TIPS.length];
         }
+        this.show();
+    }
 
-        // Фокус на выбранный предмет или первую доступную кнопку —
-        // экранами можно управлять с клавиатуры.
-        const active = this.screens[state];
+    // Показывает текущий экран, прячет остальные и ставит фокус —
+    // экранами можно управлять с клавиатуры.
+    show() {
+        const active = this.current();
+        for (const element of Object.values(this.screens)) element.hidden = element !== active;
+        this.pauseButton.hidden = this.state !== 'playing';
         if (!active) return;
         const target = active.querySelector('.item.selected')
             ?? active.querySelector('button:not(:disabled):not([hidden])');
         target?.focus();
     }
 
+    // Открывает страницу меню поверх текущего состояния.
+    open(page) {
+        this.page = page;
+        this.show();
+    }
+
+    back() {
+        this.page = null;
+        this.show();
+    }
+
+    syncSettings(values) {
+        this.byId('set-volume').value = Math.round(values.volume * 100);
+        this.byId('set-music').value = Math.round(values.music * 100);
+        this.byId('set-shake').checked = values.shake;
+    }
+
+    // ---------- Сюжетный текст ----------
+
+    // Текст появляется буква за буквой. Полный текст сразу отдан экранному диктору.
+    type(element, text) {
+        element.setAttribute('aria-label', text);
+        if (this.reducedMotion) {
+            element.textContent = text;
+            this.typing = null;
+            return;
+        }
+        element.textContent = '';
+        this.typing = { element, text, start: null, done: false };
+    }
+
+    // Вызывается каждый кадр: продвигает «печать».
+    update(time) {
+        const typing = this.typing;
+        if (!typing || typing.done) return;
+        typing.start ??= time;
+        const count = Math.floor((time - typing.start) * TYPE_SPEED);
+        typing.element.textContent = typing.text.slice(0, count);
+        typing.done = count >= typing.text.length;
+    }
+
+    // Кнопка «Дальше»: первое нажатие допечатывает текст, второе — идёт дальше.
+    advance(next) {
+        if (this.typing && !this.typing.done) {
+            this.typing.element.textContent = this.typing.text;
+            this.typing.done = true;
+            return;
+        }
+        next();
+    }
+
+    openPrologue() {
+        this.prologueIndex = 0;
+        this.open('prologue');
+        this.showPrologue();
+    }
+
+    showPrologue() {
+        this.byId('prologue-count').textContent = `Пролог · ${this.prologueIndex + 1} из ${PROLOGUE.length}`;
+        this.type(this.byId('prologue-text'), PROLOGUE[this.prologueIndex]);
+    }
+
+    nextPrologue() {
+        this.prologueIndex++;
+        if (this.prologueIndex >= PROLOGUE.length) this.closePrologue();
+        else this.showPrologue();
+    }
+
+    closePrologue() {
+        this.typing = null;
+        this.handlers.classes();
+    }
+
+    // ---------- Выбор класса ----------
+
+    renderClasses(classes, order, onPick) {
+        const list = this.byId('class-list');
+        list.replaceChildren();
+        for (const id of order) {
+            const def = classes[id];
+            const card = this.el('button', 'class-card');
+            const picture = this.copy(this.art.portrait(id));
+            picture.className = 'portrait';
+            const mana = def.maxMana > 0 ? ` · Мана ${def.maxMana}` : '';
+            card.append(
+                picture,
+                this.el('strong', '', def.name),
+                this.el('span', '', def.description),
+                this.el('small', '', `Здоровье ${def.maxHp}${mana} · J — ${def.attack.name} · K — ${def.ability.name}`)
+            );
+            card.addEventListener('click', () => onPick(id));
+            list.append(card);
+        }
+    }
+
+    // ---------- Карта ----------
+
     renderMap(game) {
-        const { profile, levels } = game;
+        const { profile, levels, cleared } = game;
         this.byId('map-gold').textContent = profile.gold;
         this.byId('map-best').textContent = profile.bestRun;
-        this.byId('map-cleared').hidden = profile.unlocked <= levels.length;
+        this.copy(this.art.crown(cleared), this.byId('map-crown'));
+        this.byId('map-crown-text').textContent = cleared >= levels.length
+            ? 'Корона собрана. Земли открыты для охоты за снаряжением.'
+            : `Зубцов короны возвращено: ${cleared} из ${levels.length}`;
+
         const list = this.byId('map-list');
         list.replaceChildren();
         levels.forEach((level, index) => {
-            const open = index < profile.unlocked;
-            const button = this.el('button', '', `${index + 1}. ${level.name}${open ? '' : ' (закрыто)'}`);
-            button.disabled = !open;
-            button.addEventListener('click', () => this.handlers.play(index));
-            list.append(button);
+            const open = game.isOpen(index);
+            const done = index < cleared;
+            const card = this.el('button', done ? 'place cleared' : 'place');
+            card.disabled = !open;
+            let status = 'Закрыто: сначала пройди предыдущую';
+            if (done) status = `${ENEMIES[level.boss].name} повержен`;
+            else if (open) status = 'Страж ещё жив';
+            card.append(
+                this.copy(this.art.thumbnail(level)),
+                this.el('span', 'eyebrow', `Локация ${ROMAN[index]}`),
+                this.el('strong', '', level.name),
+                this.el('small', '', status)
+            );
+            card.addEventListener('click', () => this.handlers.play(index));
+            list.append(card);
         });
     }
+
+    // Итоги вылазки: время, враги, ранения, золото.
+    renderStats(list, game) {
+        list.replaceChildren();
+        const rows = [
+            ['Время', formatTime(game.time)],
+            ['Врагов повержено', game.stats.kills],
+            ['Ранений получено', game.stats.hits],
+            ['Золота вынесено', game.gold],
+        ];
+        for (const [name, value] of rows) list.append(this.el('dt', '', name), this.el('dd', '', String(value)));
+    }
+
+    // ---------- Снаряжение ----------
 
     // Кнопка-ячейка предмета. Пустая ячейка неактивна.
     // short — показывать только вид предмета («меч»): в тесной ячейке сумки
@@ -153,7 +332,8 @@ export class Screens {
         const { inventory } = game.profile;
         const select = (selection) => {
             this.selected = selection;
-            this.onState('equipment', game);
+            this.renderEquipment(game);
+            this.show();
         };
         const picked = this.selected;
 
@@ -197,7 +377,10 @@ export class Screens {
         const item = fromBag ? inventory.items[picked.index] : inventory.equipped[picked?.slot];
         if (!item) {
             this.selected = null;
-            detail.append(this.el('p', '', 'Выбери предмет, чтобы увидеть свойства.'));
+            const empty = inventory.items.length === 0
+                ? 'Сумка пуста. Снаряжение падает с врагов — чаще всего с боссов.'
+                : 'Выбери предмет, чтобы увидеть свойства.';
+            detail.append(this.el('p', '', empty));
             return;
         }
 

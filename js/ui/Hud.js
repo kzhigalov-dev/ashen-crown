@@ -1,64 +1,139 @@
-const INK = '#1a1423';
+import { INTRO_TIME } from '../data/constants.js';
 
+const INK = '#1a1423';
+const FRAME = '#6b5a4a';
+const PARCHMENT = '#e6dcc6';
+const EMBER = '#e2572b';
+const GOLD = '#ffe27a';
+
+// Полоска в рамке: тёмная подложка, заполнение и светлая кромка сверху.
 function bar(ctx, x, y, width, height, fraction, back, fill) {
     ctx.fillStyle = INK;
+    ctx.fillRect(x - 2, y - 2, width + 4, height + 4);
+    ctx.fillStyle = FRAME;
     ctx.fillRect(x - 1, y - 1, width + 2, height + 2);
     ctx.fillStyle = back;
     ctx.fillRect(x, y, width, height);
+    const filled = Math.round(width * Math.max(0, Math.min(1, fraction)));
     ctx.fillStyle = fill;
-    ctx.fillRect(x, y, Math.round(width * Math.max(0, Math.min(1, fraction))), height);
+    ctx.fillRect(x, y, filled, height);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(x, y, filled, 1);
 }
 
-// Здоровье, мана, готовность способности и золото поверх игрового поля.
-export function drawHud(ctx, game, sprites) {
-    const { player } = game;
+// Часть HUD, нарисованная на игровом поле: портрет, здоровье, мана,
+// способность, золото и полоса босса. Надписи словами — в HudOverlay.
+export function drawHud(renderer, game) {
+    const { ctx, sprites } = renderer;
+    const { player, time } = game;
 
-    bar(ctx, 7, 7, 64, 6, player.hp / player.maxHp, '#5a1f1f', '#d9442b');
+    // Портрет: голова героя в рамке.
+    ctx.fillStyle = INK;
+    ctx.fillRect(4, 4, 18, 18);
+    ctx.fillStyle = FRAME;
+    ctx.fillRect(5, 5, 16, 16);
+    ctx.fillStyle = '#2a2630';
+    ctx.fillRect(6, 6, 14, 14);
+    ctx.drawImage(renderer.portrait(player.classDef.id), 0, 0, 11, 9, 8, 9, 11, 9);
+
+    // Здоровье. Когда его мало, полоска мигает.
+    const low = player.hp / player.maxHp < 0.3;
+    const blink = low && Math.floor(time * 6) % 2 === 0;
+    ctx.drawImage(sprites.heart, 26, 6);
+    bar(ctx, 37, 7, 72, 5, player.hp / player.maxHp, '#3a1420', blink ? '#ff8a6a' : EMBER);
+    renderer.drawText(Math.ceil(player.hp), 113, 7, PARCHMENT);
+
     if (player.maxMana > 0) {
-        bar(ctx, 7, 16, 64, 3, player.mana / player.maxMana, '#1f2a5a', '#5a8cff');
+        bar(ctx, 37, 17, 72, 2, player.mana / player.maxMana, '#1f2a5a', '#5a8cff');
     }
 
-    // Квадрат способности: заполняется снизу вверх, пока идёт перезарядка.
-    const ability = player.classDef.ability;
-    const ready = 1 - player.abilityCooldown / ability.cooldown;
+    // Способность: квадрат заполняется снизу вверх, пока идёт перезарядка;
+    // готовая — подсвечена золотом.
+    const ready = 1 - player.abilityCooldown / player.classDef.ability.cooldown;
     ctx.fillStyle = INK;
-    ctx.fillRect(76, 6, 10, 10);
-    ctx.fillStyle = '#3a3046';
-    ctx.fillRect(77, 7, 8, 8);
-    const fill = Math.round(8 * ready);
-    ctx.fillStyle = ready >= 1 ? '#ffe27a' : '#8a7a5a';
-    ctx.fillRect(77, 7 + 8 - fill, 8, fill);
+    ctx.fillRect(132, 4, 13, 13);
+    ctx.fillStyle = ready >= 1 ? GOLD : FRAME;
+    ctx.fillRect(133, 5, 11, 11);
+    ctx.fillStyle = '#2a2630';
+    ctx.fillRect(134, 6, 9, 9);
+    const fill = Math.round(9 * ready);
+    ctx.fillStyle = ready >= 1 ? '#d8a531' : '#57525c';
+    ctx.fillRect(134, 6 + 9 - fill, 9, fill);
+    renderer.drawText('K', 137, 8, ready >= 1 ? INK : PARCHMENT);
 
-    ctx.font = '8px monospace';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = INK;
-    ctx.fillText('K', 79, 7);
+    // Золото забега.
+    ctx.drawImage(sprites.coin, 150, 6);
+    renderer.drawText(game.gold, 161, 8, GOLD);
 
-    ctx.drawImage(sprites.coin, 92, 7);
-    ctx.fillStyle = INK;
-    ctx.fillText(String(game.gold), 104, 8);
-    ctx.fillStyle = '#ffe27a';
-    ctx.fillText(String(game.gold), 103, 7);
-
-    // Полоса здоровья босса внизу экрана.
+    // Полоса здоровья босса внизу экрана, с отметкой второй фазы посередине.
     const boss = game.enemies.find((enemy) => enemy.def.boss && enemy.awake);
     if (boss) {
-        bar(ctx, 140, 256, 200, 5, boss.hp / boss.maxHp, '#3a1420', '#b3312f');
-        ctx.textAlign = 'center';
+        bar(ctx, 120, 256, 240, 4, boss.hp / boss.maxHp, '#2a1018', '#b3312f');
         ctx.fillStyle = INK;
-        ctx.fillText(boss.def.name, 241, 245);
-        ctx.fillStyle = '#e8dcc4';
-        ctx.fillText(boss.def.name, 240, 244);
-        ctx.textAlign = 'left';
+        ctx.fillRect(239, 255, 2, 6);
+    }
+}
+
+// Надписи поверх игрового поля, сделанные обычным HTML: так текст остаётся
+// чётким при любом увеличении. Название локации, объявление о боссе,
+// имя босса, записка у костра и всплывающее сообщение.
+export class HudOverlay {
+    constructor(root) {
+        this.root = root.getElementById('hud');
+        this.card = root.getElementById('hud-card');
+        this.cardName = root.getElementById('hud-card-name');
+        this.cardIndex = root.getElementById('hud-card-index');
+        this.banner = root.getElementById('hud-banner');
+        this.bannerTitle = root.getElementById('hud-banner-title');
+        this.bannerText = root.getElementById('hud-banner-text');
+        this.toast = root.getElementById('hud-toast');
+        this.lore = root.getElementById('hud-lore');
+        this.boss = root.getElementById('hud-boss');
+        this.shown = new Map();  // что сейчас написано в каждом элементе
     }
 
-    // Название подобранного предмета — по центру вверху, цветом редкости.
-    if (game.notice) {
-        ctx.textAlign = 'center';
-        ctx.fillStyle = INK;
-        ctx.fillText(game.notice.text, 241, 25);
-        ctx.fillStyle = game.notice.color;
-        ctx.fillText(game.notice.text, 240, 24);
-        ctx.textAlign = 'left';
+    // Меняет текст и видимость элемента, только если они изменились:
+    // вызывается каждый кадр и не должна зря трогать страницу.
+    set(element, text, extra = '') {
+        const key = text === null ? null : `${text}|${extra}`;
+        if (this.shown.get(element) === key) return false;
+        this.shown.set(element, key);
+        element.hidden = text === null;
+        return text !== null;
+    }
+
+    // game = null — игра не идёт, все надписи скрыты.
+    sync(game) {
+        const playing = Boolean(game) && (game.state === 'playing' || game.state === 'paused');
+        if (this.shown.get(this.root) !== playing) {
+            this.shown.set(this.root, playing);
+            this.root.hidden = !playing;
+        }
+        if (!playing) return;
+
+        // Название локации в первые секунды уровня.
+        const intro = game.intro > 0 && game.intro < INTRO_TIME - 0.3;
+        if (this.set(this.card, intro ? game.levelDef.name : null)) {
+            this.cardName.textContent = game.levelDef.name;
+            this.cardIndex.textContent = `Локация ${game.levelIndex + 1} из ${game.levels.length}`;
+        }
+
+        const { banner, notice, lore } = game;
+        if (this.set(this.banner, banner ? banner.title : null, banner?.text)) {
+            this.bannerTitle.textContent = banner.title;
+            this.bannerText.textContent = banner.text;
+        }
+        if (this.set(this.toast, notice ? notice.text : null, notice?.color)) {
+            this.toast.textContent = notice.text;
+            this.toast.style.color = notice.color;
+        }
+        if (this.set(this.lore, lore ? lore.text : null)) {
+            this.lore.textContent = lore.text;
+        }
+
+        const boss = game.enemies.find((enemy) => enemy.def.boss && enemy.awake);
+        if (this.set(this.boss, boss ? boss.def.name : null)) {
+            this.boss.textContent = boss.def.name;
+        }
     }
 }

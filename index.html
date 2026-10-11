@@ -4,62 +4,129 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Пепельная корона</title>
+    <meta name="description" content="Пиксельный платформер: охотник идёт через проклятые земли за короной, обратившейся в пепел.">
+    <!-- Шрифты Google Fonts (лицензия SIL Open Font License): вязь для заголовков,
+         книжная антиква для сюжета, пиксельный для интерфейса.
+         Без сети игра работает на запасных системных шрифтах. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Pixelify+Sans:wght@400;600&family=Ruslan+Display&display=swap">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <main id="stage">
         <canvas id="game" aria-label="Игровое поле"></canvas>
-        <button id="btn-pause" class="hud-button" data-action="pause" hidden>Пауза (P)</button>
 
-        <section id="screen-menu" class="screen">
-            <h1>Пепельная корона</h1>
-            <p>Король пал, корона обратилась в пепел. Путь к трону лежит через проклятый лес.</p>
-            <button data-action="continue" id="btn-continue" hidden>Продолжить</button>
-            <button data-action="new">Новая игра</button>
-            <p id="save-warning" class="hint" hidden>Браузер запретил хранилище — прогресс не сохранится.</p>
-            <label class="volume">Громкость
-                <input type="range" class="volume-input" min="0" max="100" step="5" value="50">
-            </label>
-            <dl class="keys">
-                <dt>A / D, ← / →</dt><dd>движение</dd>
-                <dt>Пробел, W, ↑</dt><dd>прыжок</dd>
-                <dt>J</dt><dd>атака (можно удерживать)</dd>
-                <dt>K</dt><dd>способность класса</dd>
-                <dt>P, Esc</dt><dd>пауза</dd>
-            </dl>
+        <!-- Надписи поверх игры: показываются только во время уровня -->
+        <div id="hud" hidden>
+            <div id="hud-card" class="hud-card" hidden>
+                <span id="hud-card-index" class="eyebrow"></span>
+                <strong id="hud-card-name"></strong>
+            </div>
+            <div id="hud-banner" class="hud-banner" hidden>
+                <strong id="hud-banner-title"></strong>
+                <em id="hud-banner-text"></em>
+            </div>
+            <p id="hud-toast" class="hud-toast" hidden></p>
+            <p id="hud-lore" class="hud-lore" hidden></p>
+            <p id="hud-boss" class="hud-boss" hidden></p>
+        </div>
+        <button id="btn-pause" class="hud-button" data-action="pause" hidden>Пауза <kbd>P</kbd></button>
+
+        <!-- Титульный экран -->
+        <section id="screen-menu" class="screen left">
+            <canvas id="title-crown" class="crown" aria-hidden="true"></canvas>
+            <h1 class="logo">Пепельная<br>корона</h1>
+            <p class="tagline">Летопись охотника</p>
+            <nav class="menu" aria-label="Главное меню">
+                <button data-action="continue" id="btn-continue" hidden>Продолжить</button>
+                <button data-action="new">Новая игра</button>
+                <button data-page="controls">Управление</button>
+                <button data-page="settings">Настройки</button>
+                <button data-page="about">Об игре</button>
+            </nav>
+            <p id="save-warning" class="hint warn" hidden>Браузер запретил хранилище — прогресс не сохранится.</p>
+            <p class="footnote"><kbd>↑</kbd> <kbd>↓</kbd> выбор · <kbd>Enter</kbd> подтвердить</p>
         </section>
 
-        <section id="screen-class" class="screen" hidden>
+        <section id="screen-controls" class="screen left" hidden>
+            <h2>Управление</h2>
+            <dl class="keys">
+                <dt><kbd>A</kbd> <kbd>D</kbd> или <kbd>←</kbd> <kbd>→</kbd></dt><dd>идти</dd>
+                <dt><kbd>Пробел</kbd> <kbd>W</kbd> <kbd>↑</kbd></dt><dd>прыжок — чем дольше держишь, тем выше</dd>
+                <dt><kbd>J</kbd></dt><dd>атака, можно удерживать</dd>
+                <dt><kbd>K</kbd></dt><dd>способность класса</dd>
+                <dt><kbd>P</kbd> <kbd>Esc</kbd></dt><dd>пауза</dd>
+            </dl>
+            <p class="hint">Клавиши работают в любой раскладке. Мышь для игры не нужна.</p>
+            <button data-back>Назад</button>
+        </section>
+
+        <section id="screen-settings" class="screen left" hidden>
+            <h2>Настройки</h2>
+            <label class="field">
+                <span>Звуки</span>
+                <input type="range" id="set-volume" min="0" max="100" step="5">
+            </label>
+            <label class="field">
+                <span>Фоновый гул</span>
+                <input type="range" id="set-music" min="0" max="100" step="5">
+            </label>
+            <label class="field check">
+                <input type="checkbox" id="set-shake">
+                <span>Тряска экрана при ударах</span>
+            </label>
+            <p class="hint">Ползунок в нуле выключает звук. Настройки хранятся в этом браузере.</p>
+            <button data-back>Назад</button>
+        </section>
+
+        <section id="screen-about" class="screen left" hidden>
+            <h2>Об игре</h2>
+            <p class="prose">Корона трёх городов сгорела, и земля заболела. Ты — охотник на чудовищ и взял заказ: пройти лес, замок и подземелье и вернуть корону.</p>
+            <p class="prose">Каждый побеждённый страж возвращает короне один зубец. С врагов падает снаряжение четырёх редкостей — надевай его на карте между вылазками.</p>
+            <p class="hint">Платформер на чистом JavaScript и Canvas. Графика и звук созданы кодом. Шрифты: Ruslan Display, Old Standard TT, Pixelify Sans (SIL OFL).</p>
+            <button data-back>Назад</button>
+        </section>
+
+        <section id="screen-prologue" class="screen left" hidden>
+            <p id="prologue-count" class="eyebrow"></p>
+            <p id="prologue-text" class="story"></p>
+            <button data-action="prologueNext">Дальше</button>
+            <button data-action="prologueSkip" class="quiet">Пропустить пролог</button>
+        </section>
+
+        <section id="screen-class" class="screen wide" hidden>
             <h2>Выбери охотника</h2>
             <p id="reset-warning" class="hint warn" hidden>Сохранённый прогресс будет стёрт.</p>
             <div id="class-list" class="class-list"></div>
             <button data-action="menu" class="quiet">Назад</button>
         </section>
 
-        <section id="screen-map" class="screen" hidden>
-            <h2>Карта</h2>
-            <p class="hint">Золото: <strong id="map-gold">0</strong> · Рекорд за уровень: <strong id="map-best">0</strong></p>
+        <section id="screen-map" class="screen wide" hidden>
+            <header class="map-head">
+                <canvas id="map-crown" class="crown crown--small" aria-hidden="true"></canvas>
+                <div>
+                    <h2>Карта</h2>
+                    <p id="map-crown-text" class="hint"></p>
+                </div>
+                <p class="purse">Золото <strong id="map-gold">0</strong><br>Рекорд за вылазку <strong id="map-best">0</strong></p>
+            </header>
             <div id="map-list" class="map-list"></div>
-            <p id="map-cleared" class="hint" hidden>Проклятие снято. Локации открыты для охоты за снаряжением.</p>
-            <button data-action="equipment">Снаряжение</button>
-            <button data-action="menu" class="quiet">В меню</button>
+            <div class="row">
+                <button data-action="equipment">Снаряжение</button>
+                <button data-action="menu" class="quiet">В меню</button>
+            </div>
         </section>
 
-        <section id="screen-story" class="screen" hidden>
+        <section id="screen-story" class="screen left" hidden>
+            <p id="story-index" class="eyebrow"></p>
             <h2 id="story-title"></h2>
             <p id="story-text" class="story"></p>
             <button data-action="begin">В путь</button>
-            <button data-action="map" class="quiet">Назад</button>
+            <button data-action="map" class="quiet">Назад к карте</button>
         </section>
 
-        <section id="screen-victory" class="screen" hidden>
-            <h2>Корона возвращена</h2>
-            <p id="victory-text" class="story"></p>
-            <p>Собрано золота: <strong data-gold>0</strong></p>
-            <button data-action="map">На карту</button>
-        </section>
-
-        <section id="screen-equipment" class="screen" hidden>
+        <section id="screen-equipment" class="screen wide" hidden>
             <h2>Снаряжение</h2>
             <div class="equip">
                 <div class="equip-col">
@@ -76,35 +143,44 @@
             <button data-action="map">На карту</button>
         </section>
 
-        <section id="screen-paused" class="screen" hidden>
-            <h2>Пауза</h2>
-            <button data-action="resume">Продолжить</button>
-            <button data-action="restart">Рестарт уровня</button>
-            <button data-action="map">На карту (золото забега пропадёт)</button>
-            <label class="volume">Громкость
-                <input type="range" class="volume-input" min="0" max="100" step="5" value="50">
-            </label>
-            <dl class="keys">
-                <dt>A / D, ← / →</dt><dd>движение</dd>
-                <dt>Пробел, W, ↑</dt><dd>прыжок</dd>
-                <dt>J</dt><dd>атака (можно удерживать)</dd>
-                <dt>K</dt><dd>способность класса</dd>
-                <dt>P, Esc</dt><dd>пауза</dd>
-            </dl>
+        <section id="screen-paused" class="screen center" hidden>
+            <div class="sheet">
+                <h2>Пауза</h2>
+                <button data-action="resume">Продолжить</button>
+                <button data-action="restart">Начать уровень заново</button>
+                <button data-page="controls">Управление</button>
+                <button data-page="settings">Настройки</button>
+                <button data-action="map" class="quiet">На карту — золото вылазки пропадёт</button>
+            </div>
         </section>
 
-        <section id="screen-complete" class="screen" hidden>
-            <h2>Лес пройден</h2>
-            <p>Собрано золота: <strong data-gold>0</strong></p>
-            <button data-action="map">На карту</button>
-            <button data-action="restart">Сыграть ещё раз</button>
+        <section id="screen-complete" class="screen center" hidden>
+            <div class="sheet">
+                <p class="eyebrow">Локация пройдена</p>
+                <h2 id="complete-title"></h2>
+                <dl id="complete-stats" class="stats"></dl>
+                <button data-action="map">На карту</button>
+                <button data-action="restart" class="quiet">Пройти ещё раз</button>
+            </div>
         </section>
 
-        <section id="screen-dead" class="screen" hidden>
-            <h2>Охотник пал</h2>
-            <p>Золото этого забега потеряно. Найденное снаряжение осталось в сумке.</p>
-            <button data-action="restart">Попробовать снова</button>
+        <section id="screen-victory" class="screen left" hidden>
+            <canvas id="victory-crown" class="crown" aria-hidden="true"></canvas>
+            <h2>Корона возвращена</h2>
+            <p id="victory-text" class="story"></p>
+            <dl id="victory-stats" class="stats"></dl>
             <button data-action="map">На карту</button>
+        </section>
+
+        <section id="screen-dead" class="screen center" hidden>
+            <div class="sheet">
+                <p class="eyebrow">Вылазка окончена</p>
+                <h2>Охотник пал</h2>
+                <p class="prose">Золото этой вылазки потеряно. Найденное снаряжение осталось в сумке.</p>
+                <p id="dead-tip" class="hint"></p>
+                <button data-action="restart">Попробовать снова</button>
+                <button data-action="map" class="quiet">На карту</button>
+            </div>
         </section>
     </main>
     <script type="module" src="js/main.js"></script>
