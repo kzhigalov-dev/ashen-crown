@@ -34,7 +34,7 @@ export function drawHud(renderer, game) {
     ctx.fillRect(5, 5, 16, 16);
     ctx.fillStyle = '#2a2630';
     ctx.fillRect(6, 6, 14, 14);
-    ctx.drawImage(renderer.portrait(player.classDef.id), 0, 0, 11, 9, 8, 9, 11, 9);
+    ctx.drawImage(renderer.portrait(player.classDef.id), 3, 0, 12, 11, 7, 7, 12, 11);
 
     // Здоровье. Когда его мало, полоска мигает.
     const low = player.hp / player.maxHp < 0.3;
@@ -49,7 +49,7 @@ export function drawHud(renderer, game) {
 
     // Способность: квадрат заполняется снизу вверх, пока идёт перезарядка;
     // готовая — подсвечена золотом.
-    const ready = 1 - player.abilityCooldown / player.classDef.ability.cooldown;
+    const ready = 1 - player.abilityCooldown / player.weapon.ability.cooldown;
     ctx.fillStyle = INK;
     ctx.fillRect(132, 4, 13, 13);
     ctx.fillStyle = ready >= 1 ? GOLD : FRAME;
@@ -114,8 +114,9 @@ export class HudOverlay {
         // Название локации в первые секунды уровня.
         const intro = game.intro > 0 && game.intro < INTRO_TIME - 0.3;
         if (this.set(this.card, intro ? game.levelDef.name : null)) {
-            this.cardName.textContent = game.levelDef.name;
-            this.cardIndex.textContent = `Локация ${game.levelIndex + 1} из ${game.levels.length}`;
+            const { name, worldName, number } = game.levelDef;
+            this.cardName.textContent = name;
+            this.cardIndex.textContent = `${worldName} · уровень ${number} из 5`;
         }
 
         const { banner, notice, lore } = game;

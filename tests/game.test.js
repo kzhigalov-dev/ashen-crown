@@ -1049,3 +1049,74 @@ test('дождь стрел накрывает землю впереди гер�
     assert.ok(game.enemies.some((enemy) => enemy.hp < 30), 'хотя бы один враг впереди задет');
     assert.equal(game.player.x, startX);
 });
+
+// ---------- Миры ----------
+
+test('сила уровня делает обычных врагов крепче, стражей не меняет', () => {
+    const strong = { ...bossArena('#P..s....T........E#'), power: 1.5 };
+    const input = new InputHandler(fakeTarget());
+    const game = new Game({ levels: [strong], input });
+    game.startLevel();
+    const slime = game.enemies.find((enemy) => enemy.type === 'slime');
+    const boss = game.enemies.find((enemy) => enemy.def.boss);
+    assert.equal(slime.maxHp, 45);
+    assert.equal(slime.hp, 45);
+    assert.equal(slime.damage, 15);
+    assert.equal(boss.maxHp, 260);
+});
+
+test('зубцы короны: по одному за каждого поверженного стража', () => {
+    const plain = { ...arenaDef, boss: null };
+    const lair = { ...arenaDef, boss: 'treant' };
+    const { game } = saved('swordsman', () => 0.5, [plain, lair, plain, lair]);
+    const clear = (index) => {
+        game.playLevel(index);
+        game.player.x = game.level.exit.x + 3;
+        game.update(STEP);
+    };
+    assert.equal(game.crowns, 0);
+    clear(0);
+    assert.equal(game.crowns, 0, 'обычный уровень зубца не даёт');
+    clear(1);
+    assert.equal(game.crowns, 1);
+    clear(2);
+    clear(3);
+    assert.equal(game.crowns, 2);
+});
+
+test('добыча и записки зависят от мира уровня, а не от его id', async () => {
+    const { LORE } = await import('../js/data/story.js');
+    const def = { ...levelDef, id: 'castle-3', world: 'castle', number: 3 };
+    const target = fakeTarget();
+    const input = new InputHandler(target);
+    const game = new Game({ levels: [def], input });
+    input.attach();
+    game.startLevel();
+    assert.equal(game.world, 'castle');
+    game.player.x = 67;
+    game.update(STEP);
+    assert.equal(game.lore.text, LORE.castle[4], 'третий уровень, первый костёр');
+});
+
+test('выстрел вплотную попадает во врага, даже если за ним стена', () => {
+    // Слизень стоит у стены, герой — вплотную к нему, лицом к стене.
+    const wall = {
+        id: 'wall', name: 'Wall',
+        segments: [['..........', '..........', '.P....s#E.', '##########']],
+    };
+    const target = fakeTarget();
+    const input = new InputHandler(target);
+    const game = new Game({ levels: [wall], input, rng: () => 0.5 });
+    input.attach();
+    game.classId = 'archer';
+    game.startLevel();
+    const slime = game.enemies[0];
+    slime.def = { ...slime.def, speed: 0 };
+    game.player.invuln = 99;
+    run(game, input, 1);
+    slime.x = 7 * 16 - slime.w;          // вплотную к стене
+    game.player.x = slime.x + 2;         // герой внутри слизня
+    target.dispatch('keydown', { code: 'KeyJ' });
+    run(game, input, 3);
+    assert.equal(slime.hp, 20, 'стрела попала, а не разбилась о стену');
+});

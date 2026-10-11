@@ -6,8 +6,9 @@ import { HudOverlay } from './ui/Hud.js';
 import { Save } from './systems/Save.js';
 import { Settings } from './systems/Settings.js';
 import { AudioSystem } from './systems/Audio.js';
-import { LEVELS } from './data/levels.js';
+import { LEVELS, WORLDS } from './data/levels.js';
 import { CLASSES, CLASS_ORDER } from './data/classes.js';
+import { WEAPONS } from './data/weapons.js';
 
 // Даже обращение к localStorage может бросить ошибку (приватный режим,
 // запрет в настройках) — тогда игра работает без сохранения.
@@ -32,7 +33,7 @@ for (const type of ['pointerdown', 'keydown']) {
 
 const renderer = new Renderer(document.getElementById('game'), new HudOverlay(document));
 const input = new InputHandler(window);
-const screens = new Screens(document, renderer);
+const screens = new Screens(document, renderer, WORLDS);
 
 const game = new Game({
     levels: LEVELS,
@@ -45,7 +46,7 @@ const game = new Game({
         screens.onState(state, current);
         // Во время уровня звучит фон локации, в остальное время — фон меню.
         const inLevel = ['playing', 'paused'].includes(state);
-        audio.startAmbience(inLevel ? current.levelDef.id : 'menu');
+        audio.startAmbience(inLevel ? current.levelDef.world : 'menu');
     },
 });
 
@@ -86,7 +87,9 @@ function menuFrame(now) {
     if (!game.level) {
         // За меню — самая дальняя открытая локация; перед входом в локацию — она сама.
         const index = game.state === 'story' ? game.levelIndex : Math.min(game.cleared, LEVELS.length - 1);
-        renderer.drawTitle(time, LEVELS[index], game.profile?.classId ?? 'swordsman');
+        const classId = game.profile?.classId ?? 'swordsman';
+        const kind = game.profile?.inventory.equipped.weapon?.kind ?? CLASSES[classId].starter;
+        renderer.drawTitle(time, LEVELS[index], classId, WEAPONS[kind].sprite);
     }
     screens.update(time);
     requestAnimationFrame(menuFrame);

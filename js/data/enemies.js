@@ -8,11 +8,24 @@
 // gold  — сколько золота выпадает: [от, до].
 // sight — на каком расстоянии враг замечает героя.
 // Отрисовка: frames — кадры движения, idle — кадр стоя, scale — увеличение,
+// figure — чью фигуру из HEROES брать (иначе кадры ищутся в SPRITES),
 // recolor — замена цветов палитры, weapon — оружие в руке (для фигур-людей),
 // color — цвет частиц при гибели, line — реплика босса при пробуждении.
 
-const BONE = { h: '#cfc8b4', H: '#ece6d2', s: '#ece6d2', w: '#1a1423', c: '#8f8a78', C: '#b3ad98', b: '#5a5560', l: '#8f8a78', L: '#6b6658' };
-const DARK_STEEL = { h: '#2b2f3a', H: '#454b5a', s: '#1a1423', w: '#ff4a3a', c: '#20232c', C: '#343946', b: '#8a1f1f', l: '#20232c', L: '#14161c' };
+// Скелеты и Чёрный рыцарь — фигуры героев (figure) в других цветах:
+// доспех мечника становится костью или воронёной сталью.
+const BONE = {
+    X: '#ece6d2', x: '#cfc8b4', a: '#8f8a78', s: '#ece6d2', w: '#1a1423',
+    c: '#4a4450', C: '#5f5966', r: '#4a4450', b: '#5a5560', l: '#cfc8b4', L: '#8f8a78',
+};
+const BONE_ARCHER = {
+    I: '#5f5966', i: '#4a4450', t: '#cfc8b4', T: '#ece6d2', p: '#3a3640',
+    s: '#ece6d2', w: '#1a1423', b: '#5a5560', l: '#cfc8b4', L: '#8f8a78',
+};
+const DARK_STEEL = {
+    X: '#454b5a', x: '#343946', a: '#20232c', s: '#14161c', w: '#ff4a3a',
+    c: '#5a1212', C: '#8a1f1f', r: '#8a1f1f', b: '#8a1f1f', l: '#20232c', L: '#14161c',
+};
 
 export const ENEMIES = {
     slime: {
@@ -29,13 +42,13 @@ export const ENEMIES = {
         id: 'skeleton', name: 'Скелет-мечник', behavior: 'striker', color: '#ece6d2',
         w: 10, h: 22, maxHp: 60, damage: 8, speed: 30, gold: [8, 12],
         reach: 20, windup: 0.4, recover: 0.7, strikeDamage: 18,
-        frames: ['heroRun1', 'heroRun2'], idle: 'heroIdle', recolor: BONE, weapon: 'sword',
+        figure: 'swordsman', frames: ['run1', 'run2', 'run3', 'run2'], idle: 'idle', recolor: BONE, weapon: 'sword',
     },
     skeletonArcher: {
         id: 'skeletonArcher', name: 'Скелет-лучник', behavior: 'shooter', color: '#ece6d2',
         w: 10, h: 22, maxHp: 40, damage: 8, speed: 0, sight: 170, gold: [8, 12],
         rate: 2, shot: 'enemyArrow', shotDamage: 10,
-        frames: ['heroIdle'], idle: 'heroIdle', recolor: BONE, weapon: 'bow',
+        figure: 'archer', frames: ['idle'], idle: 'idle', recolor: BONE_ARCHER, weapon: 'bow',
     },
     imp: {
         id: 'imp', name: 'Бес', behavior: 'flyer', color: '#d9442b',
@@ -56,7 +69,7 @@ export const ENEMIES = {
         id: 'knight', name: 'Чёрный рыцарь', behavior: 'knight', boss: true, color: '#454b5a',
         w: 18, h: 42, maxHp: 380, damage: 18, speed: 30, gold: [60, 90],
         attackRate: [2.0, 1.2], windup: 0.6, dashSpeed: 200, dashTime: 0.55, hazardDamage: 15,
-        frames: ['heroRun1', 'heroRun2'], idle: 'heroIdle', recolor: DARK_STEEL, weapon: 'sword', scale: 2,
+        figure: 'swordsman', frames: ['run1', 'run2', 'run3', 'run2'], idle: 'idle', recolor: DARK_STEEL, weapon: 'axe', scale: 2,
         line: '«Никто не войдёт в зал. Таков был приказ»',
     },
     demon: {

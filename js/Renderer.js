@@ -1,6 +1,6 @@
 import { TILE, VIEW_W, VIEW_H, INTRO_TIME, HURT_FLASH } from './data/constants.js';
 import { SOLID } from './Level.js';
-import { PALETTE, SPRITES, GLYPHS } from './data/sprites.js';
+import { PALETTE, SPRITES, GLYPHS, HEROES } from './data/sprites.js';
 import { CLASSES } from './data/classes.js';
 import { ENEMIES } from './data/enemies.js';
 import { rarityOf } from './systems/Loot.js';
@@ -8,19 +8,32 @@ import { drawHud } from './ui/Hud.js';
 
 const SILHOUETTES = [38, 62, 46, 80, 54, 70, 42, 66];
 const SILHOUETTE_GAP = 44;
-const HERO_FRAMES = ['heroIdle', 'heroRun1', 'heroRun2', 'heroJump'];
+const RUN_CYCLE = ['run1', 'run2', 'run3', 'run2'];
 const TILE_SPRITES = ['groundTop', 'ground', 'platform'];
 const AIR_PARTICLES = 38;
 const FADE_IN = 0.6;   // сколько секунд уровень проявляется из темноты
 
-// Где фигура держит оружие: смещение от левого края спрайта
-// (для фигуры, смотрящей вправо).
-const WEAPON_OFFSET = {
-    sword: { x: 8, y: 1 },
-    bow: { x: 8, y: 4 },
-    staff: { x: 9, y: -1 },
+// Где фигура держит оружие: смещение спрайта оружия от левого верхнего угла
+// спрайта фигуры (для фигуры, смотрящей вправо). Кисть — в точке (13, 12).
+const HOLD = {
+    sword: { x: 12, y: 2 },
+    axe: { x: 12, y: 2 },
+    spear: { x: 12, y: -2 },
+    bow: { x: 9, y: 6 },
+    shortbow: { x: 10, y: 8 },
+    crossbow: { x: 10, y: 9 },
+    staffFire: { x: 11, y: -2 },
+    staffIce: { x: 11, y: -2 },
+    staffStorm: { x: 11, y: -2 },
 };
-const SLASH_OFFSET = { x: 10, y: -3 };
+// След удара ближнего боя: взмах или выпад.
+const SWING = {
+    slash: { x: 13, y: -1 },
+    thrust: { x: 10, y: 12 },
+};
+// Свечение снарядов и цвета ударов по площади.
+const SHOT_GLOW = { fireball: '#f28a2e', shard: '#8fd8ff', spark: '#ffe27a' };
+const BLAST_COLOR = { fire: '#f28a2e', frost: '#8fd8ff', whirl: '#d5dbe0' };
 
 // Цвета короны: зубец золотой, если его локация пройдена, иначе пепельный.
 const CROWN_GOLD = '#e8b923';
@@ -97,19 +110,24 @@ export class Renderer {
             this.flipped[name] = buildSprite(rows, { flip: true });
         }
 
-        // Герой каждого класса — та же фигура в цветах класса.
+        // Кадры героя каждого класса.
         this.heroes = {};
-        for (const [id, def] of Object.entries(CLASSES)) {
+        for (const id of Object.keys(CLASSES)) {
             this.heroes[id] = {};
-            for (const frame of HERO_FRAMES) this.heroes[id][frame] = buildSet(SPRITES[frame], def.palette);
+            for (const [frame, rows] of Object.entries(HEROES[id].frames)) {
+                this.heroes[id][frame] = buildSet(rows, HEROES[id].recolor);
+            }
         }
 
-        // Кадры каждого врага в его цветах.
+        // Кадры каждого врага в его цветах. Скелеты и рыцарь берут фигуру героя.
         this.foes = {};
         for (const [id, def] of Object.entries(ENEMIES)) {
             this.foes[id] = {};
+            const figure = HEROES[def.figure];
             for (const frame of new Set([...def.frames, def.idle ?? def.frames[0]])) {
-                this.foes[id][frame] = buildSet(SPRITES[frame], def.recolor);
+                const rows = figure ? figure.frames[frame] : SPRITES[frame];
+                const recolor = figure ? { ...figure.recolor, ...def.recolor } : def.recolor;
+                this.foes[id][frame] = buildSet(rows, recolor);
             }
         }
 
@@ -120,7 +138,7 @@ export class Renderer {
 
     // Портрет героя для экрана выбора класса.
     portrait(classId) {
-        return this.heroes[classId].heroIdle.right;
+        return this.heroes[classId].idle.right;
     }
 
     // Корона — знак игры: cleared зубцов из трёх позолочены.
@@ -169,14 +187,15 @@ export class Renderer {
     }
 
     tilesFor(levelDef) {
-        if (!this.tileSets[levelDef.id]) {
+        const key = levelDef.world ?? levelDef.id;
+        if (!this.tileSets[key]) {
             const set = {};
             for (const name of TILE_SPRITES) {
                 set[name] = buildSprite(SPRITES[name], { recolor: levelDef.theme.tiles });
             }
-            this.tileSets[levelDef.id] = set;
+            this.tileSets[key] = set;
         }
-        return this.tileSets[levelDef.id];
+        return this.tileSets[key];
     }
 
     // ---------- Кадр игры ----------
@@ -234,7 +253,7 @@ export class Renderer {
     // ---------- Сцена за меню ----------
 
     // Охотник у костра под падающим пеплом. Камера неподвижна, живёт только воздух.
-    drawTitle(time, levelDef, classId) {
+    drawTitle(time, levelDef, classId, weaponSprite) {
         const { ctx } = this;
         const { theme } = levelDef;
         const tiles = this.tilesFor(levelDef);
@@ -249,15 +268,10 @@ export class Renderer {
         }
         this.drawCampfire(352, ground, time, true);
 
-        const hero = this.heroes[classId].heroIdle.right;
-        const weapon = CLASSES[classId].weapon;
+        const hero = this.heroes[classId].idle.right;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(325, ground - 1, 10, 2);
-        ctx.drawImage(hero, 324, ground - hero.height);
-        ctx.drawImage(
-            this.sprites[weapon],
-            324 + WEAPON_OFFSET[weapon].x, ground - hero.height + WEAPON_OFFSET[weapon].y
-        );
+        ctx.fillRect(323, ground - 1, 10, 2);
+        this.drawFigure(hero, 320, ground - hero.height, true, weaponSprite, 1, Math.floor(time * 2) % 2);
 
         this.drawAir(theme, time, 0);
         ctx.drawImage(this.vignette, 0, 0);
@@ -647,14 +661,15 @@ export class Renderer {
             const sy = Math.round(enemy.y + enemy.h - sh);
             ctx.drawImage(sprite, sx, sy, sw, sh);
 
-            if (def.weapon) {
-                const weapon = right ? this.sprites[def.weapon] : this.flipped[def.weapon];
-                const offset = WEAPON_OFFSET[def.weapon];
-                const wx = right ? offset.x : sprite.width - offset.x - weapon.width;
-                ctx.drawImage(
-                    weapon, sx + wx * scale, sy + offset.y * scale,
-                    weapon.width * scale, weapon.height * scale
-                );
+            if (def.weapon) this.drawHeld(def.weapon, sx, sy, sprite.width, right, scale);
+
+            // Замороженный враг покрыт инеем.
+            if (enemy.frozen > 0) {
+                ctx.globalAlpha = 0.5;
+                ctx.drawImage(this.foes[enemy.type][frame][right ? 'rightWhite' : 'leftWhite'], sx, sy, sw, sh);
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#8fd8ff';
+                ctx.fillRect(sx + 1, sy + sh - 2, sw - 2, 2);
             }
 
             // Полоска здоровья над раненым врагом. У босса она в HUD.
@@ -669,14 +684,37 @@ export class Renderer {
         }
     }
 
-    // Снаряды героя и врагов. Магические и огненные светятся.
+    // Снаряды героя и врагов. Огненные, ледяные и молнии светятся.
     drawShots(shots) {
         for (const shot of shots) {
             const set = shot.dir === 1 ? this.sprites : this.flipped;
-            if (shot.sprite === 'bolt') this.glow(shot.x + 3, shot.y + 3, 12, '#7a3fd1', 0.5);
-            else if (shot.sprite === 'fireball') this.glow(shot.x + 3, shot.y + 3, 14, '#f28a2e', 0.5);
+            const glow = SHOT_GLOW[shot.sprite];
+            if (glow) this.glow(shot.x + shot.w / 2, shot.y + shot.h / 2, 14, glow, 0.5);
             this.ctx.drawImage(set[shot.sprite], Math.round(shot.x), Math.round(shot.y));
         }
+    }
+
+    // Оружие в руке фигуры. sx, sy — левый верхний угол спрайта фигуры.
+    drawHeld(name, sx, sy, figureWidth, right, scale = 1) {
+        const weapon = right ? this.sprites[name] : this.flipped[name];
+        const hold = HOLD[name];
+        const x = right ? hold.x : figureWidth - hold.x - weapon.width;
+        this.ctx.drawImage(
+            weapon, sx + x * scale, sy + hold.y * scale,
+            weapon.width * scale, weapon.height * scale
+        );
+    }
+
+    // Фигура героя с оружием. bob = 1 — «вдох»: верх тела на пиксель ниже.
+    drawFigure(sprite, sx, sy, right, weaponName, scale = 1, bob = 0) {
+        const { ctx } = this;
+        if (bob) {
+            ctx.drawImage(sprite, 0, 0, 16, 18, sx, sy + 1, 16, 18);
+            ctx.drawImage(sprite, 0, 18, 16, 6, sx, sy + 18, 16, 6);
+        } else {
+            ctx.drawImage(sprite, sx, sy);
+        }
+        if (weaponName) this.drawHeld(weaponName, sx, sy + bob, sprite.width, right, scale);
     }
 
     drawEffects(effects) {
@@ -685,13 +723,39 @@ export class Renderer {
             const progress = 1 - effect.ttl / effect.life;
             ctx.globalAlpha = Math.max(0, 1 - progress);
             if (effect.kind === 'blast') {
-                // Расходящееся кольцо взрыва.
-                ctx.strokeStyle = '#c08bff';
+                // Удар по площади: расходящееся кольцо цвета стихии.
+                // Круговой удар секиры — две дуги вместо полного кольца.
+                const color = BLAST_COLOR[effect.style] ?? '#c08bff';
+                const radius = effect.radius * (0.3 + 0.7 * progress);
+                ctx.strokeStyle = color;
                 ctx.lineWidth = 3;
                 ctx.beginPath();
-                ctx.arc(effect.x, effect.y, effect.radius * (0.3 + 0.7 * progress), 0, Math.PI * 2);
+                if (effect.style === 'whirl') {
+                    const turn = progress * Math.PI * 2;
+                    ctx.arc(effect.x, effect.y, effect.radius, turn, turn + 2.2);
+                    ctx.moveTo(effect.x - Math.cos(turn) * effect.radius, effect.y - Math.sin(turn) * effect.radius);
+                    ctx.arc(effect.x, effect.y, effect.radius, turn + Math.PI, turn + Math.PI + 2.2);
+                } else {
+                    ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+                }
                 ctx.stroke();
-                this.glow(effect.x, effect.y, effect.radius, '#7a3fd1', 0.35 * (1 - progress));
+                this.glow(effect.x, effect.y, effect.radius, color, 0.35 * (1 - progress));
+            } else if (effect.kind === 'lightning') {
+                // Молния: ломаная линия между точками, изломы постоянны для каждой пары.
+                ctx.strokeStyle = '#ffe27a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(effect.x, effect.y);
+                for (let i = 1; i <= 4; i++) {
+                    const t = i / 4;
+                    const jitter = i < 4 ? (hash(effect.x2 + i * 3.3) - 0.5) * 12 : 0;
+                    ctx.lineTo(
+                        effect.x + (effect.x2 - effect.x) * t + jitter,
+                        effect.y + (effect.y2 - effect.y) * t + jitter
+                    );
+                }
+                ctx.stroke();
+                this.glow(effect.x2, effect.y2, 18, '#ffe27a', 0.6 * (1 - progress));
             } else if (effect.kind === 'strike') {
                 // След удара скелета.
                 ctx.fillStyle = '#ffffff';
@@ -734,12 +798,15 @@ export class Renderer {
     // След рывка: полупрозрачные копии героя на прошлых местах.
     drawTrail(game) {
         const { ctx } = this;
-        const frames = this.heroes[game.player.classDef.id].heroRun1;
+        const frames = this.heroes[game.player.classDef.id].run1;
         for (const ghost of game.trail) {
             ctx.globalAlpha = (ghost.ttl / 0.18) * 0.45;
             const sprite = ghost.facing === 1 ? frames.rightWhite : frames.leftWhite;
-            const x = ghost.facing === 1 ? ghost.x : ghost.x + game.player.w - sprite.width;
-            ctx.drawImage(sprite, Math.round(x), Math.round(ghost.y));
+            ctx.drawImage(
+                sprite,
+                Math.round(ghost.x + game.player.w / 2 - sprite.width / 2),
+                Math.round(ghost.y + game.player.h - sprite.height)
+            );
         }
         ctx.globalAlpha = 1;
     }
@@ -749,31 +816,30 @@ export class Renderer {
         const blinking = player.invuln > 0 && player.dashTime <= 0;
         if (blinking && Math.floor(player.invuln * 20) % 2 === 0) return;
 
-        let frame = 'heroIdle';
-        if (player.state === 'jump') frame = 'heroJump';
-        else if (player.state === 'dash') frame = 'heroRun1';
-        else if (player.state === 'run') frame = Math.floor(player.animTime * 10) % 2 ? 'heroRun1' : 'heroRun2';
+        const { weapon } = player;
+        const attacking = player.attackTime > 0;
+        let frame = 'idle';
+        if (attacking) frame = 'attack';
+        else if (player.state === 'jump') frame = player.vy < 0 ? 'jump' : 'fall';
+        else if (player.state === 'dash') frame = 'run1';
+        else if (player.state === 'run') frame = RUN_CYCLE[Math.floor(player.animTime * 10) % RUN_CYCLE.length];
 
         const right = player.facing === 1;
         if (player.onGround) this.drawShadow(player);
-        const hero = this.heroes[player.classDef.id][frame][right ? 'right' : 'left'];
-        // Спрайт шире хитбокса: лишние пиксели (рука) торчат в сторону взгляда.
-        this.ctx.drawImage(hero, Math.round(this.mirrorX(player, 0, hero.width)), Math.round(player.y));
+        const sprite = this.heroes[player.classDef.id][frame][right ? 'right' : 'left'];
+        // Спрайт шире и выше хитбокса: стоит на его нижнем крае, по центру.
+        const sx = Math.round(player.x + player.w / 2 - sprite.width / 2);
+        const sy = Math.round(player.y + player.h - sprite.height);
 
-        const swinging = player.classDef.attack.type === 'melee' && player.attackTime > 0;
-        const name = swinging ? 'slash' : player.classDef.weapon;
-        const offset = swinging ? SLASH_OFFSET : WEAPON_OFFSET[name];
-        const sprite = right ? this.sprites[name] : this.flipped[name];
-        this.ctx.drawImage(
-            sprite,
-            Math.round(this.mirrorX(player, offset.x, sprite.width)),
-            Math.round(player.y + offset.y)
-        );
-    }
-
-    // X для детали героя: смещение задано для взгляда вправо,
-    // для взгляда влево оно отражается относительно хитбокса.
-    mirrorX(player, offsetX, width) {
-        return player.facing === 1 ? player.x + offsetX : player.x + player.w - offsetX - width;
+        // Удар ближнего боя: вместо оружия в руке рисуется след взмаха или выпада.
+        const swing = attacking && weapon.attack.type === 'melee' ? weapon.attack.swing : null;
+        const breathing = frame === 'idle' && Math.floor(player.animTime * 2) % 2 === 1;
+        this.drawFigure(sprite, sx, sy, right, swing ? null : weapon.sprite, 1, breathing ? 1 : 0);
+        if (swing) {
+            const trace = right ? this.sprites[swing] : this.flipped[swing];
+            const offset = SWING[swing];
+            const x = right ? offset.x : sprite.width - offset.x - trace.width;
+            this.ctx.drawImage(trace, sx + x, sy + offset.y);
+        }
     }
 }

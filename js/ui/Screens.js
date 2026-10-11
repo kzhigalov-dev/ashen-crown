@@ -1,5 +1,6 @@
 import { SLOTS, SLOT_NAMES, STATS, STAT_ORDER, INVENTORY_SIZE } from '../data/items.js';
 import { ENEMIES } from '../data/enemies.js';
+import { WEAPONS } from '../data/weapons.js';
 import { rarityOf, dismantleValue } from '../systems/Loot.js';
 import { PROLOGUE, STORY, EPILOGUE } from '../data/story.js';
 
@@ -24,10 +25,12 @@ const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor
 
 // HTML-экраны поверх игрового поля.
 export class Screens {
-    // art — источник картинок: portrait(classId), crown(cleared), thumbnail(levelDef).
-    constructor(root, art) {
+    // art — источник картинок: portrait(classId), crown(cleared), thumbnail(levelDef);
+    // worlds — миры игры (для карты).
+    constructor(root, art, worlds) {
         this.root = root;
         this.art = art;
+        this.worlds = worlds;
         this.byId = (id) => root.getElementById(id);
         this.screens = {};
         for (const name of [...Object.values(STATE_SCREENS), ...PAGES]) {
@@ -132,7 +135,7 @@ export class Screens {
         if (state === 'menu') {
             this.byId('btn-continue').hidden = !game.hasSave;
             this.byId('save-warning').hidden = game.save.available;
-            this.copy(this.art.crown(game.cleared), this.byId('title-crown'));
+            this.copy(this.art.crown(game.crowns), this.byId('title-crown'));
         } else if (state === 'classSelect') {
             this.byId('reset-warning').hidden = !game.hasSave;
         } else if (state === 'map') {
@@ -141,14 +144,14 @@ export class Screens {
         } else if (state === 'equipment') {
             this.renderEquipment(game);
         } else if (state === 'story') {
-            this.byId('story-index').textContent = `Локация ${ROMAN[game.levelIndex]}`;
+            this.byId('story-index').textContent = `${game.levelDef.worldName} · уровень ${ROMAN[game.levelDef.number - 1]}`;
             this.byId('story-title').textContent = game.levelDef.name;
             this.type(this.byId('story-text'), STORY[game.levelDef.id] ?? '');
         } else if (state === 'complete') {
             this.byId('complete-title').textContent = game.levelDef.name;
             this.renderStats(this.byId('complete-stats'), game);
         } else if (state === 'victory') {
-            this.copy(this.art.crown(game.levels.length), this.byId('victory-crown'));
+            this.copy(this.art.crown(this.worlds.length), this.byId('victory-crown'));
             this.type(this.byId('victory-text'), EPILOGUE.join('\n\n'));
             this.renderStats(this.byId('victory-stats'), game);
         } else if (state === 'dead') {
@@ -165,6 +168,7 @@ export class Screens {
         this.pauseButton.hidden = this.state !== 'playing';
         if (!active) return;
         const target = active.querySelector('.item.selected')
+            ?? active.querySelector('.step:not(.done):not(:disabled)')
             ?? active.querySelector('button:not(:disabled):not([hidden])');
         target?.focus();
     }
@@ -253,11 +257,13 @@ export class Screens {
             const picture = this.copy(this.art.portrait(id));
             picture.className = 'portrait';
             const mana = def.maxMana > 0 ? ` · Мана ${def.maxMana}` : '';
+            const weapon = WEAPONS[def.starter];
             card.append(
                 picture,
                 this.el('strong', '', def.name),
                 this.el('span', '', def.description),
-                this.el('small', '', `Здоровье ${def.maxHp}${mana} · J — ${def.attack.name} · K — ${def.ability.name}`)
+                this.el('small', '', `Здоровье ${def.maxHp}${mana}`),
+                this.el('small', '', `Начинает с оружием «${weapon.name}»: J — ${weapon.attack.name}, K — ${weapon.ability.name}`)
             );
             card.addEventListener('click', () => onPick(id));
             list.append(card);
@@ -266,34 +272,46 @@ export class Screens {
 
     // ---------- Карта ----------
 
+    // Карта: три мира, в каждом пять уровней. Пятый — логово стража.
     renderMap(game) {
-        const { profile, levels, cleared } = game;
+        const { profile, levels, cleared, crowns } = game;
         this.byId('map-gold').textContent = profile.gold;
         this.byId('map-best').textContent = profile.bestRun;
-        this.copy(this.art.crown(cleared), this.byId('map-crown'));
-        this.byId('map-crown-text').textContent = cleared >= levels.length
+        this.copy(this.art.crown(crowns), this.byId('map-crown'));
+        this.byId('map-crown-text').textContent = crowns >= this.worlds.length
             ? 'Корона собрана. Земли открыты для охоты за снаряжением.'
-            : `Зубцов короны возвращено: ${cleared} из ${levels.length}`;
+            : `Зубцов короны возвращено: ${crowns} из ${this.worlds.length}`;
 
         const list = this.byId('map-list');
         list.replaceChildren();
-        levels.forEach((level, index) => {
-            const open = game.isOpen(index);
-            const done = index < cleared;
-            const card = this.el('button', done ? 'place cleared' : 'place');
-            card.disabled = !open;
-            let status = 'Закрыто: сначала пройди предыдущую';
-            if (done) status = `${ENEMIES[level.boss].name} повержен`;
-            else if (open) status = 'Страж ещё жив';
-            card.append(
-                this.copy(this.art.thumbnail(level)),
-                this.el('span', 'eyebrow', `Локация ${ROMAN[index]}`),
-                this.el('strong', '', level.name),
-                this.el('small', '', status)
-            );
-            card.addEventListener('click', () => this.handlers.play(index));
-            list.append(card);
-        });
+        for (const world of this.worlds) {
+            const column = this.el('section', 'world');
+            const indices = levels.map((level, index) => index).filter((index) => levels[index].world === world.id);
+            const bossDown = indices.every((index) => index < cleared);
+            const reached = game.isOpen(indices[0]);
+            if (!reached) column.classList.add('locked');
+
+            const thumb = this.copy(this.art.thumbnail(levels[indices[0]]));
+            let status = 'Путь закрыт';
+            if (bossDown) status = `${ENEMIES[world.boss].name} повержен`;
+            else if (reached) status = `Страж: ${ENEMIES[world.boss].name}`;
+            column.append(thumb, this.el('strong', '', world.name), this.el('small', bossDown ? 'done' : '', status));
+
+            const steps = this.el('div', 'steps');
+            for (const index of indices) {
+                const level = levels[index];
+                const done = index < cleared;
+                const mark = done ? '✓' : ROMAN[level.number - 1];
+                const button = this.el('button', done ? 'step done' : 'step');
+                button.disabled = !game.isOpen(index);
+                button.append(this.el('span', 'step-mark', mark), this.el('span', '', level.name));
+                if (level.boss) button.append(this.el('span', 'step-boss', 'страж'));
+                button.addEventListener('click', () => this.handlers.play(index));
+                steps.append(button);
+            }
+            column.append(steps);
+            list.append(column);
+        }
     }
 
     // Итоги вылазки: время, враги, ранения, золото.
@@ -386,6 +404,16 @@ export class Screens {
 
         detail.style.setProperty('--rarity', rarityOf(item).color);
         detail.append(this.el('strong', '', item.name), this.el('p', '', SLOT_NAMES[item.slot]));
+
+        // Вид оружия меняет атаку и способность — показываем, что именно.
+        const weapon = WEAPONS[item.kind];
+        if (weapon) {
+            detail.append(
+                this.el('p', 'moves', `${weapon.text}`),
+                this.el('p', 'moves', `J — ${weapon.attack.name}`),
+                this.el('p', 'moves', `K — ${weapon.ability.name}: ${weapon.ability.text}`)
+            );
+        }
 
         // Для предмета из сумки показываем разницу с надетым в том же слоте.
         const worn = fromBag ? inventory.equipped[item.slot] : null;

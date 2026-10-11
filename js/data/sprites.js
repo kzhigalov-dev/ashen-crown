@@ -37,6 +37,15 @@ export const PALETTE = {
     u: '#6a6f7d',    // шерсть волка
     U: '#9aa0ad',    // шерсть, свет
     v: '#3c4050',    // шерсть, тень
+    a: '#7d8792',    // сталь, тень
+    i: '#3f6b3a',    // плащ лучника
+    I: '#63994f',    // плащ лучника, свет
+    t: '#5a4a2e',    // кожа доспеха
+    T: '#80693f',    // кожа доспеха, свет
+    z: '#2f3f6b',    // мантия мага
+    Z: '#435a94',    // мантия мага, свет
+    E: '#8fd8ff',    // лёд
+    O: '#d9f4ff',    // лёд, блик
     1: '#d8a531',    // корона: левый зубец (перекрашивается по прогрессу)
     2: '#d8a531',    // корона: средний зубец
     3: '#d8a531',    // корона: правый зубец
@@ -63,60 +72,245 @@ export const GLYPHS = {
     K: ['#.#', '#.#', '##.', '#.#', '#.#'],
 };
 
-const HERO_TOP = [
-    '...kkkkk....',
-    '..khhhhhk...',
-    '.khhHHHhhk..',
-    '.khHHHHHhk..',
-    '.khhssssk...',
-    '.khsswskk...',
-    '.khssssk....',
-    '..kkssk.....',
-    '.kccccck....',
-    'kcCCcccck...',
-    'kcCCccccsk..',
-    'kcCCcccck...',
-    'kccccccck...',
-    '.kbbbbbk....',
-    '.kccccck....',
-    '.kccccck....',
+// ---------- Герои ----------
+// Фигура 16×24 собирается из трёх частей: голова (9 строк), торс (9) и ноги (6).
+// У торса два вида — обычный и с выставленной вперёд рукой (атака);
+// у ног — стойка, три кадра бега, прыжок и падение. Все смотрят вправо.
+
+const SWORDSMAN_HEAD = [
+    '......rr........',
+    '.....rrkkkk.....',
+    '....krXXXXxk....',
+    '....kXXxxxxxk...',
+    '....kXxxxxxxk...',
+    '....kxkkkkkkk...',
+    '....kxsswskxk...',
+    '....kxsssskak...',
+    '.....kkssskk....',
+];
+const SWORDSMAN_TORSO = [
+    '...kXXkccckXXk..',
+    '..kXxxkcCCckxxk.',
+    '..kxakxcCCcxkak.',
+    '..kakkxccccxksk.',
+    '...kk.kxccxk.k..',
+    '......kbbbbk....',
+    '......kccCck....',
+    '......kcccck....',
+    '......kccCck....',
+];
+const SWORDSMAN_ATTACK = [
+    '...kXXkccckXXk..',
+    '..kXxxkcCCckxxkk',
+    '..kxakxcCCcxkask',
+    '..kakkxccccxkkk.',
+    '...kk.kxccxk....',
+    '......kbbbbk....',
+    '......kccCck....',
+    '......kcccck....',
+    '......kccCck....',
 ];
 
-const LEGS_IDLE = [
-    '.kllkllk....',
-    '.kllkllk....',
-    '.kllkllk....',
-    '.kllkllk....',
-    '.kLLkLLk....',
-    '.kkkkkkk....',
+const ARCHER_HEAD = [
+    '................',
+    '......kkkk......',
+    '.....kIIIIk.....',
+    '....kIIiiiik....',
+    '....kIiiiiiik...',
+    '....kiikkkkkk...',
+    '....kiksswsk....',
+    '....kikssssk....',
+    '....kiikssk.....',
+];
+const ARCHER_TORSO = [
+    '..wkiikttttk....',
+    '..kkiiktTTttk...',
+    '..kpkiktTTttkk..',
+    '..kpkiktttttksk.',
+    '..kpkiikttttkk..',
+    '...kkikbbbbk....',
+    '....kikttttk....',
+    '....kikttttk....',
+    '.....kkttttk....',
+];
+const ARCHER_ATTACK = [
+    '..wkiikttttk....',
+    '..kkiiktTTttk...',
+    '..kpkiktTTttkkk.',
+    '..kpkiktttttkssk',
+    '..kpkiikttttkkk.',
+    '...kkikbbbbk....',
+    '....kikttttk....',
+    '....kikttttk....',
+    '.....kkttttk....',
 ];
 
-const LEGS_RUN1 = [
-    '.kllkkllk...',
-    'kllk..kllk..',
-    'kllk..kllk..',
-    'kLLk...kllk.',
-    'kkkk...kLLk.',
-    '.......kkkk.',
+const MAGE_HEAD = [
+    '.......kk.......',
+    '......kMmk......',
+    '......kMmmk.....',
+    '.....kMMmmk.....',
+    '....kMMmmmmk....',
+    '..kkkkkkkkkkkk..',
+    '....kssswsk.....',
+    '....kwsssswk....',
+    '.....kwwwwk.....',
+];
+const MAGE_TORSO = [
+    '....kzkwwkzk....',
+    '...kzZzkkzZzk...',
+    '...kzZzzzzZzkk..',
+    '...kzkzZZzzzksk.',
+    '...kskzZZzzzkk..',
+    '....kkbbbbbk....',
+    '.....kzZZzzk....',
+    '.....kzZZzzk....',
+    '....kzzZZzzzk...',
+];
+const MAGE_ATTACK = [
+    '....kzkwwkzk....',
+    '...kzZzkkzZzk...',
+    '...kzZzzzzZzkkk.',
+    '...kzkzZZzzzkssk',
+    '...kskzZZzzzkkk.',
+    '....kkbbbbbk....',
+    '.....kzZZzzk....',
+    '.....kzZZzzk....',
+    '....kzzZZzzzk...',
 ];
 
-const LEGS_RUN2 = [
-    '.kllllk.....',
-    '..kllk......',
-    '..kllk......',
-    '..kllkk.....',
-    '..kLLLk.....',
-    '..kkkkk.....',
-];
+// Ноги мечника и лучника (цвет штанов и сапог у каждого свой — см. recolor).
+const LEGS = {
+    idle: [
+        '......kllkllk...',
+        '......kllkllk...',
+        '......kllkllk...',
+        '......kLLkLLk...',
+        '......kLLkLLk...',
+        '.....kkLLkLLLk..',
+    ],
+    run1: [
+        '......kllkllk...',
+        '.....kllkkllk...',
+        '....kllk..kllk..',
+        '...kLLk....kLLk.',
+        '...kLLk....kLLLk',
+        '...kkk.....kkkkk',
+    ],
+    run2: [
+        '......kllkllk...',
+        '......kllkllk...',
+        '......kllkllk...',
+        '.......kLkLLk...',
+        '.......kkkLLLk..',
+        '.........kkkkk..',
+    ],
+    run3: [
+        '......kllkllk...',
+        '.....kllkkllk...',
+        '....kllk..kllk..',
+        '...kLLk...kLLk..',
+        '..kLLLk...kLLk..',
+        '..kkkkk...kkkk..',
+    ],
+    jump: [
+        '......kllkllk...',
+        '.....kllkkllk...',
+        '.....kLLk.kllk..',
+        '.....kkkk.kLLk..',
+        '..........kkkk..',
+        '................',
+    ],
+    fall: [
+        '......kllkllk...',
+        '.....kllk.kllk..',
+        '.....kllk.kllk..',
+        '.....kLLk.kLLk..',
+        '.....kLLk.kLLk..',
+        '.....kkkk.kkkk..',
+    ],
+};
 
-const LEGS_JUMP = [
-    '.kllkllk....',
-    'kllk.kllk...',
-    'kLLk.kllk...',
-    'kkkk.kLLk...',
-    '.....kkkk...',
-    '............',
-];
+// Подол мантии мага вместо ног.
+const ROBE = {
+    idle: [
+        '....kzzZZzzzk...',
+        '....kzzZZzzzk...',
+        '...kzzzZZzzzzk..',
+        '...kzzzZZzzzzk..',
+        '...kzzzzzzzzzk..',
+        '...kkLLkkkLLkk..',
+    ],
+    run1: [
+        '....kzzZZzzzk...',
+        '....kzzZZzzzzk..',
+        '...kzzzZZzzzzzk.',
+        '...kzzzZZzzzzzk.',
+        '..kzzzzzzzzzzk..',
+        '..kLLkkkkkkLLLk.',
+    ],
+    run2: [
+        '....kzzZZzzzk...',
+        '....kzzZZzzzk...',
+        '...kzzzZZzzzzk..',
+        '...kzzzZZzzzzk..',
+        '...kzzzzzzzzzk..',
+        '....kkLLkLLkk...',
+    ],
+    run3: [
+        '....kzzZZzzzk...',
+        '...kzzzZZzzzk...',
+        '..kzzzzZZzzzk...',
+        '..kzzzzZZzzzzk..',
+        '...kzzzzzzzzzk..',
+        '....kkLLkLLkk...',
+    ],
+    jump: [
+        '....kzzZZzzzk...',
+        '...kzzzZZzzzzk..',
+        '..kzzzzZZzzzzzk.',
+        '..kzzkkzzzkkzzk.',
+        '..kkk.kLLLk.kkk.',
+        '.......kkk......',
+    ],
+    fall: [
+        '....kzzZZzzzk...',
+        '...kzzzZZzzzzk..',
+        '..kzzzzZZzzzzzk.',
+        '..kzzkkzzzkkzzk.',
+        '..kkk.kLLLk.kkk.',
+        '.......kkk......',
+    ],
+};
+
+// Кадры героя: стойка, бег (три кадра), прыжок, падение, атака.
+function figure(head, torso, attack, legs) {
+    return {
+        idle: [...head, ...torso, ...legs.idle],
+        run1: [...head, ...torso, ...legs.run1],
+        run2: [...head, ...torso, ...legs.run2],
+        run3: [...head, ...torso, ...legs.run3],
+        jump: [...head, ...torso, ...legs.jump],
+        fall: [...head, ...torso, ...legs.fall],
+        attack: [...head, ...attack, ...legs.idle],
+    };
+}
+
+// recolor — цвета штанов (l) и сапог (L) класса.
+export const HEROES = {
+    swordsman: {
+        recolor: { l: '#3a3f4a', L: '#7d8792' },
+        frames: figure(SWORDSMAN_HEAD, SWORDSMAN_TORSO, SWORDSMAN_ATTACK, LEGS),
+    },
+    archer: {
+        recolor: { l: '#4a3b2a', L: '#2b2433' },
+        frames: figure(ARCHER_HEAD, ARCHER_TORSO, ARCHER_ATTACK, LEGS),
+    },
+    mage: {
+        recolor: { L: '#4a3b2a' },
+        frames: figure(MAGE_HEAD, MAGE_TORSO, MAGE_ATTACK, ROBE),
+    },
+};
 
 const CAMPFIRE = [
     '....F.....',
@@ -156,11 +350,6 @@ const WOLF_BODY = [
 ];
 
 export const SPRITES = {
-    heroIdle: [...HERO_TOP, ...LEGS_IDLE],
-    heroRun1: [...HERO_TOP, ...LEGS_RUN1],
-    heroRun2: [...HERO_TOP, ...LEGS_RUN2],
-    heroJump: [...HERO_TOP, ...LEGS_JUMP],
-
     groundTop: [
         'GGGGGGGGGGGGGGGG',
         'GgGGGgGGGGgGGGgG',
@@ -252,54 +441,82 @@ export const SPRITES = {
         'nnnnnnnnnnnn',
     ],
 
-    // Оружие в руке героя (герой смотрит вправо).
+    // ---------- Оружие в руке героя (герой смотрит вправо) ----------
     sword: [
-        '.X.',
-        '.X.',
-        '.X.',
-        '.X.',
-        '.X.',
-        '.X.',
-        '.X.',
-        '.X.',
+        '.X.', '.X.', '.X.', '.X.', '.X.', '.X.', '.X.', '.X.', '.x.',
         'bbb',
-        '.p.',
-        '.p.',
+        '.p.', '.p.',
         '.k.',
     ],
-
-    bow: [
-        '.p..',
-        'wPp.',
-        'w.Pp',
-        'w..p',
-        'w..p',
-        'w..p',
-        'w..p',
-        'w..p',
-        'w..p',
-        'w.Pp',
-        'wPp.',
-        '.p..',
+    axe: [
+        '.pXXX..',
+        '.pxXXX.',
+        '.pxxXXX',
+        '.pxxXXX',
+        '.pxXXX.',
+        '.pXXX..',
+        '.p.....', '.p.....', '.p.....', '.p.....', '.p.....', '.p.....', '.p.....',
+        '.k.....',
     ],
-
-    staff: [
-        '.M.',
-        'MwM',
-        '.M.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
-        '.p.',
+    spear: [
+        '.X.', '.X.', 'XXX', 'XXX', '.X.',
+        '.p.', '.p.', '.p.', '.p.', '.p.', '.p.', '.p.', '.p.',
+        '.p.', '.p.', '.p.', '.p.', '.p.', '.p.', '.p.', '.p.',
+        '.k.',
+    ],
+    bow: [
+        '..pp.',
+        '.wPp.',
+        'w..Pp',
+        'w...p', 'w...p', 'w...p', 'w...p', 'w...p', 'w...p', 'w...p', 'w...p',
+        'w..Pp',
+        '.wPp.',
+        '..pp.',
+    ],
+    shortbow: [
+        '.pp.',
+        'wPp.',
+        'w.Pp',
+        'w..p', 'w..p', 'w..p', 'w..p',
+        'w.Pp',
+        'wPp.',
+        '.pp.',
+    ],
+    crossbow: [
+        '......pk..',
+        '.....kPk..',
+        'kpppppPxX.',
+        'kPPPPPPxXX',
+        'kpppppPxX.',
+        '.....kPk..',
+        '......pk..',
+    ],
+    staffFire: [
+        '..F..',
+        '.fFf.',
+        'rfFfr',
+        '.rfr.',
+        '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..',
+        '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..',
+        '..k..',
+    ],
+    staffIce: [
+        '..O..',
+        '.EOE.',
+        'EOwOE',
+        '.EOE.',
+        '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..',
+        '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..',
+        '..k..',
+    ],
+    staffStorm: [
+        'Y...Y',
+        'y.Y.y',
+        'y.w.y',
+        '.yyy.',
+        '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..',
+        '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..', '..p..',
+        '..k..',
     ],
 
     // След от взмаха меча.
@@ -324,6 +541,14 @@ export const SPRITES = {
         '....ww......',
     ],
 
+    // След выпада копьём.
+    thrust: [
+        '.................ww.',
+        'wwwwwwwwwwwwwwwwwwww',
+        '.................ww.',
+    ],
+
+    // ---------- Снаряды ----------
     arrow: [
         'w.....X.',
         'wpppppXX',
@@ -336,13 +561,26 @@ export const SPRITES = {
         'Y.....Y.',
     ],
 
-    bolt: [
-        '.mMMm.',
-        'mMwwMm',
-        'MwwwwM',
-        'MwwwwM',
-        'mMwwMm',
-        '.mMMm.',
+    quarrel: [
+        '.....X.',
+        'kppppXX',
+        '.....X.',
+    ],
+    spearShot: [
+        '.........XX.',
+        'pppppppppXXX',
+        '.........XX.',
+    ],
+    shard: [
+        '..EOO..',
+        'EEOOOOw',
+        'EEOOOOw',
+        '..EOO..',
+    ],
+    spark: [
+        '.Y..Y...Y.',
+        'YwYYwYYYwY',
+        '..Y...Y...',
     ],
 
     // Слизень: высокий кадр и приплюснутый — вместе дают «дыхание».

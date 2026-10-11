@@ -53,7 +53,7 @@ body {
     width: 480px;
     height: 270px;
     overflow: hidden;
-    font-size: calc(6.5px * var(--scale));
+    font-size: calc(7px * var(--scale));
 }
 
 #game {
@@ -417,14 +417,15 @@ input:focus-visible {
 }
 
 .class-card small {
-    font-size: 0.78em;
+    font-family: var(--text);
+    font-size: 0.9em;
     color: var(--cinder);
 }
 
-/* Спрайт 12×22 увеличен без сглаживания; под ним полоска «земли». */
+/* Спрайт 16×24 увеличен без сглаживания; под ним полоска «земли». */
 .portrait {
-    width: 3.6em;
-    height: 6.6em;
+    width: 4.8em;
+    height: 7.2em;
     border-bottom: 0.3em solid #4a3328;
     image-rendering: pixelated;
 }
@@ -458,7 +459,7 @@ input:focus-visible {
     color: var(--gold-light);
 }
 
-/* Три локации в ряд — это дорога: между карточками тянется пунктир. */
+/* Три мира в ряд — это дорога: между колонками тянется пунктир. */
 .map-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -467,50 +468,90 @@ input:focus-visible {
     max-width: 58em;
 }
 
-.place {
+.world {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.35em;
+    gap: 0.3em;
     min-width: 0;
     padding: 0.5em;
-    text-align: left;
+    border: 0.15em solid var(--frame);
     background: rgba(29, 25, 34, 0.94);
+    text-align: left;
 }
 
-.place:not(:last-child)::after {
+.world:not(:last-child)::after {
     content: '';
     position: absolute;
-    top: 50%;
+    top: 22%;
     left: 100%;
-    width: 1.6em;
+    width: 1.75em;
     border-top: 0.15em dashed var(--frame);
 }
 
-.place canvas {
+.world canvas {
     width: 100%;
-    aspect-ratio: 120 / 68;
+    aspect-ratio: 120 / 42;
+    object-fit: cover;
+    object-position: bottom;
     image-rendering: pixelated;
 }
 
-.place strong {
+.world.locked canvas {
+    filter: grayscale(1) brightness(0.45);
+}
+
+.world strong {
     font-family: var(--display);
-    font-size: 1.25em;
+    font-size: 1.2em;
     font-weight: normal;
     color: var(--gold);
 }
 
-.place small {
-    font-size: 0.8em;
+.world small {
+    font-size: 0.75em;
     color: var(--cinder);
 }
 
-.place.cleared small {
+.world small.done {
     color: var(--gold);
 }
 
-.place:disabled canvas {
-    filter: grayscale(1) brightness(0.5);
+/* Пять уровней мира — список ступеней. */
+.steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2em;
+    margin-top: 0.3em;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    min-width: 0;
+    padding: 0.22em 0.5em;
+    font-size: 0.9em;
+    text-align: left;
+}
+
+.step-mark {
+    flex: none;
+    width: 1.6em;
+    color: var(--cinder);
+    text-align: center;
+}
+
+.step.done .step-mark {
+    color: var(--gold);
+}
+
+.step-boss {
+    margin-left: auto;
+    font-size: 0.75em;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ember);
 }
 
 /* ---------- Снаряжение ---------- */
@@ -592,6 +633,11 @@ input:focus-visible {
     list-style: none;
     font-size: 0.9em;
     line-height: 1.6;
+}
+
+.detail p.moves {
+    margin-top: 0;
+    color: var(--parchment);
 }
 
 .detail .up {

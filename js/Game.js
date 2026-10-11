@@ -93,11 +93,20 @@ export class Game {
         return this.save.load() !== null;
     }
 
-    // Сколько локаций пройдено — столько зубцов короны позолочено.
-    // Пока игра не загружена, берётся из сохранения.
+    // Сколько уровней пройдено. Пока игра не загружена, берётся из сохранения.
     get cleared() {
         const profile = this.profile ?? this.save.load();
         return profile ? Math.min(this.levels.length, profile.unlocked - 1) : 0;
+    }
+
+    // Сколько стражей повержено — столько зубцов короны позолочено.
+    get crowns() {
+        return this.levels.slice(0, this.cleared).filter((level) => level.boss).length;
+    }
+
+    // Мир текущего уровня: от него зависят добыча, записки и оформление.
+    get world() {
+        return this.levelDef.world ?? this.levelDef.id;
     }
 
     setState(state) {
@@ -384,9 +393,13 @@ export class Game {
                 this.emit('heal');
                 this.notice = { text: 'Костёр: здоровье восстановлено', color: '#ffd75e', ttl: NOTICE_TIME };
             }
-            // У каждого костра лежит записка — кусочек истории.
-            const text = LORE[this.levelDef.id]?.[level.checkpoints.indexOf(checkpoint)];
-            if (text) this.lore = { text, ttl: LORE_TIME };
+            // У каждого костра лежит записка — кусочек истории. На разных уровнях
+            // мира записки разные: номер зависит от уровня и от костра.
+            const notes = LORE[this.world];
+            if (notes) {
+                const index = ((this.levelDef.number ?? 1) - 1) * 2 + level.checkpoints.indexOf(checkpoint);
+                this.lore = { text: notes[index % notes.length], ttl: LORE_TIME };
+            }
         }
 
         const fellOut = player.y > level.height;
@@ -449,8 +462,15 @@ export class Game {
         return this.enemies.some((enemy) => enemy.def.boss && !enemy.dead);
     }
 
+    // Обычные враги на поздних уровнях мира крепче и бьют больнее (power уровня).
     createEnemy(type, x, y) {
-        return ENEMIES[type].boss ? new Boss(type, x, y) : new Enemy(type, x, y);
+        if (ENEMIES[type].boss) return new Boss(type, x, y);
+        const enemy = new Enemy(type, x, y);
+        const power = this.levelDef.power ?? 1;
+        enemy.maxHp = Math.round(enemy.maxHp * power);
+        enemy.hp = enemy.maxHp;
+        enemy.damage = Math.round(enemy.damage * power);
+        return enemy;
     }
 
     // Уровень пройден: золото забега уходит в общее, открывается следующая локация.
@@ -506,20 +526,28 @@ export class Game {
 
     updateProjectiles(dt) {
         for (const projectile of this.projectiles) {
-            projectile.update(dt, this.level);
+            // Сначала проверка на месте: снаряд, выпущенный вплотную к врагу,
+            // должен попасть, даже если следующим шагом упрётся в стену.
+            this.strikeEnemies(projectile);
             if (projectile.dead) continue;
-            for (const enemy of this.enemies) {
-                if (enemy.dead || !overlaps(projectile, enemy)) continue;
-                const hit = this.hitEnemy(
-                    enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit, projectile.stun
-                );
-                if (hit && !projectile.pierce) {
-                    projectile.dead = true;
-                    break;
-                }
-            }
+            projectile.update(dt, this.level);
+            if (!projectile.dead) this.strikeEnemies(projectile);
         }
         this.projectiles = this.projectiles.filter((projectile) => !projectile.dead);
+    }
+
+    // Попадания снаряда по врагам. Обычный снаряд гибнет о первого, пробивающий летит дальше.
+    strikeEnemies(projectile) {
+        for (const enemy of this.enemies) {
+            if (enemy.dead || !overlaps(projectile, enemy)) continue;
+            const hit = this.hitEnemy(
+                enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit, projectile.stun
+            );
+            if (hit && !projectile.pierce) {
+                projectile.dead = true;
+                return;
+            }
+        }
     }
 
     updateEnemies(dt) {
@@ -625,7 +653,7 @@ export class Game {
         this.drops.push(new LootDrop(x, y, dir, { value }));
 
         const item = rollDrop({
-            locationId: this.levelDef.id,
+            locationId: this.world,
             classId: this.profile.classId,
             rng: this.rng,
             boss: enemy.def.boss === true,
