@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../js/entities/Player.js';
 import { Level } from '../js/Level.js';
-import { STEP } from '../js/data/constants.js';
+import { STEP, JUMP_SPEED } from '../js/data/constants.js';
+import { CLASSES } from '../js/data/classes.js';
 
 const flat = new Level({
     id: 'flat',
@@ -144,12 +145,12 @@ test('буфер прыжка: нажатие чуть до приземлени
 test('hurt: урон и неуязвимость на 0,8 с', () => {
     const player = settled(flat);
     assert.equal(player.hurt(10), true);
-    assert.equal(player.hp, 90);
+    assert.equal(player.hp, 110);
     assert.equal(player.hurt(10), false);
-    assert.equal(player.hp, 90);
+    assert.equal(player.hp, 110);
     steps(player, flat, 55);
     assert.equal(player.hurt(10), true);
-    assert.equal(player.hp, 80);
+    assert.equal(player.hp, 100);
 });
 
 test('takeDamage: здоровье не уходит ниже нуля, герой погибает', () => {
@@ -158,4 +159,188 @@ test('takeDamage: здоровье не уходит ниже нуля, геро
     assert.equal(player.hp, 0);
     assert.equal(player.dead, true);
     assert.equal(player.hurt(10), false);
+});
+
+// ---------- Классы и бой ----------
+
+function settledAs(id, level = flat) {
+    const player = new Player(CLASSES[id]);
+    player.placeAt(level.spawn);
+    player.update(STEP, NONE, level);
+    player.takeActions();
+    return player;
+}
+
+const HOLD_ATTACK = input(['attack']);
+const PRESS_ABILITY = input([], ['ability']);
+
+test('здоровье и мана берутся из класса', () => {
+    assert.equal(settledAs('swordsman').maxHp, 120);
+    assert.equal(settledAs('archer').hp, 90);
+    const mage = settledAs('mage');
+    assert.equal(mage.hp, 70);
+    assert.equal(mage.mana, 100);
+    assert.equal(settledAs('swordsman').maxMana, 0);
+});
+
+test('мечник: удар даёт область перед героем, один номер на весь взмах', () => {
+    const player = settledAs('swordsman');
+    player.update(STEP, HOLD_ATTACK, flat);
+    const [first] = player.takeActions();
+    assert.equal(first.type, 'melee');
+    assert.equal(first.damage, 14);
+    assert.equal(first.dir, 1);
+    assert.ok(first.box.x >= player.x + player.w / 2, 'область справа от середины героя');
+    assert.equal(first.box.w, 24);
+    player.update(STEP, HOLD_ATTACK, flat);
+    const [second] = player.takeActions();
+    assert.equal(second.id, first.id, 'тот же взмах');
+});
+
+test('мечник: удар влево бьёт влево', () => {
+    const player = settledAs('swordsman');
+    player.x = 80;
+    player.update(STEP, input(['left', 'attack']), flat);
+    const [action] = player.takeActions();
+    assert.equal(action.dir, -1);
+    assert.ok(action.box.x + action.box.w <= player.x + player.w / 2 + 0.001);
+});
+
+test('перезарядка атаки 0,4 с: за 0,38 с один взмах, за 0,45 с — два', () => {
+    const player = settledAs('swordsman');
+    const ids = new Set();
+    for (let i = 0; i < 23; i++) {
+        player.update(STEP, HOLD_ATTACK, flat);
+        for (const action of player.takeActions()) ids.add(action.id);
+    }
+    assert.equal(ids.size, 1);
+    for (let i = 0; i < 4; i++) {
+        player.update(STEP, HOLD_ATTACK, flat);
+        for (const action of player.takeActions()) ids.add(action.id);
+    }
+    assert.equal(ids.size, 2);
+});
+
+test('лучник: стрела летит в сторону взгляда', () => {
+    const player = settledAs('archer');
+    player.update(STEP, HOLD_ATTACK, flat);
+    const actions = player.takeActions();
+    assert.equal(actions.length, 1);
+    assert.deepEqual(
+        { type: actions[0].type, kind: actions[0].kind, damage: actions[0].damage, dir: actions[0].dir },
+        { type: 'projectile', kind: 'arrow', damage: 10, dir: 1 }
+    );
+    assert.ok(actions[0].x > player.x + player.w / 2, 'появляется перед героем');
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(player.takeActions().length, 0, 'перезарядка');
+});
+
+test('маг: шар тратит 12 маны, без маны атаки нет', () => {
+    const player = settledAs('mage');
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(player.takeActions()[0].kind, 'bolt');
+    assert.equal(player.mana, 88);
+
+    const empty = settledAs('mage');
+    empty.mana = 5;
+    empty.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(empty.takeActions().length, 0);
+    assert.equal(empty.attackCooldown, 0, 'перезарядка не началась');
+});
+
+test('маг: мана восстанавливается на 8 в секунду и не выше максимума', () => {
+    const player = settledAs('mage');
+    player.mana = 0;
+    steps(player, flat, 60);
+    assert.ok(Math.abs(player.mana - 8) < 0.2, `мана ${player.mana}`);
+    player.mana = 99.99;
+    steps(player, flat, 60);
+    assert.equal(player.mana, 100);
+});
+
+test('двойной прыжок есть у лучника', () => {
+    const player = settledAs('archer');
+    player.update(STEP, PRESS_JUMP, flat);
+    steps(player, flat, 15, HOLD_JUMP);
+    player.update(STEP, PRESS_JUMP, flat);
+    assert.ok(player.vy < -JUMP_SPEED * 0.8, `скорость ${player.vy}`);
+    assert.equal(player.jumpsLeft, 0);
+    steps(player, flat, 5, HOLD_JUMP);
+    const before = player.vy;
+    player.update(STEP, PRESS_JUMP, flat);
+    assert.ok(player.vy > before, 'третьего прыжка нет');
+    steps(player, flat, 90);
+    assert.equal(player.jumpsLeft, 1, 'на земле прыжок возвращается');
+});
+
+test('двойного прыжка нет у мечника', () => {
+    const player = settledAs('swordsman');
+    player.update(STEP, PRESS_JUMP, flat);
+    steps(player, flat, 15, HOLD_JUMP);
+    const before = player.vy;
+    player.update(STEP, PRESS_JUMP, flat);
+    assert.ok(player.vy > before);
+});
+
+test('рывок мечника: быстро, без падения, с неуязвимостью и одним номером удара', () => {
+    const player = settledAs('swordsman');
+    player.y -= 10;          // в воздухе
+    player.onGround = false;
+    const startX = player.x;
+    const startY = player.y;
+    const ids = new Set();
+    player.update(STEP, PRESS_ABILITY, flat);
+    assert.ok(player.dashTime > 0);
+    assert.ok(player.invuln > 0);
+    for (const action of player.takeActions()) ids.add(action.id);
+    for (let i = 0; i < 9; i++) {
+        player.update(STEP, NONE, flat);
+        for (const action of player.takeActions()) {
+            assert.equal(action.damage, 20);
+            ids.add(action.id);
+        }
+    }
+    assert.equal(player.y, startY, 'во время рывка не падает');
+    assert.equal(ids.size, 1);
+    steps(player, flat, 5);
+    const distance = player.x - startX;
+    assert.ok(distance > 50 && distance < 65, `дистанция ${distance}`);
+    assert.equal(player.dashTime <= 0, true);
+});
+
+test('способность на перезарядке не срабатывает', () => {
+    const player = settledAs('swordsman');
+    player.update(STEP, PRESS_ABILITY, flat);
+    steps(player, flat, 30);
+    player.takeActions();
+    player.update(STEP, PRESS_ABILITY, flat);
+    assert.ok(player.dashTime <= 0);
+    assert.ok(player.abilityCooldown > 3 && player.abilityCooldown < 4);
+});
+
+test('лучник: пробивающий выстрел', () => {
+    const player = settledAs('archer');
+    player.update(STEP, PRESS_ABILITY, flat);
+    const [action] = player.takeActions();
+    assert.equal(action.kind, 'piercingArrow');
+    assert.equal(action.damage, 24);
+    assert.equal(player.abilityCooldown, 5);
+});
+
+test('маг: взрыв тратит 30 маны и бьёт вокруг героя', () => {
+    const player = settledAs('mage');
+    player.update(STEP, PRESS_ABILITY, flat);
+    const [action] = player.takeActions();
+    assert.equal(action.type, 'blast');
+    assert.equal(action.damage, 30);
+    assert.equal(player.mana, 70);
+    assert.equal(player.abilityCooldown, 6);
+    const cx = player.x + player.w / 2;
+    assert.equal(action.box.x, cx - 44);
+    assert.equal(action.box.w, 88);
+
+    const empty = settledAs('mage');
+    empty.mana = 20;
+    empty.update(STEP, PRESS_ABILITY, flat);
+    assert.equal(empty.takeActions().length, 0);
 });

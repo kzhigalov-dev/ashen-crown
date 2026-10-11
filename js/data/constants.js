@@ -16,6 +16,8 @@ export const COYOTE_TIME = 0.1;
 export const JUMP_BUFFER = 0.1;
 // Доля скорости прыжка, до которой он срезается, если клавишу отпустили
 export const JUMP_CUT = 0.45;
+// Сила прыжка в воздухе относительно обычного (двойной прыжок лучника)
+export const AIR_JUMP_FACTOR = 0.9;
 
 // Правила мира
 export const HAZARD_DAMAGE = 20;
