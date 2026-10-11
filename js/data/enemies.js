@@ -9,7 +9,7 @@
 // sight — на каком расстоянии враг замечает героя.
 // Отрисовка: frames — кадры движения, idle — кадр стоя, scale — увеличение,
 // recolor — замена цветов палитры, weapon — оружие в руке (для фигур-людей),
-// color — цвет частиц при гибели.
+// color — цвет частиц при гибели, line — реплика босса при пробуждении.
 
 const BONE = { h: '#cfc8b4', H: '#ece6d2', s: '#ece6d2', w: '#1a1423', c: '#8f8a78', C: '#b3ad98', b: '#5a5560', l: '#8f8a78', L: '#6b6658' };
 const DARK_STEEL = { h: '#2b2f3a', H: '#454b5a', s: '#1a1423', w: '#ff4a3a', c: '#20232c', C: '#343946', b: '#8a1f1f', l: '#20232c', L: '#14161c' };
@@ -50,17 +50,20 @@ export const ENEMIES = {
         w: 26, h: 42, maxHp: 260, damage: 12, speed: 0, gold: [40, 60],
         attackRate: [2.2, 1.4], hazardDamage: 15, summonRate: 7,
         frames: ['treant'], scale: 2,
+        line: '«Клятва… ещё… держит»',
     },
     knight: {
         id: 'knight', name: 'Чёрный рыцарь', behavior: 'knight', boss: true, color: '#454b5a',
         w: 18, h: 42, maxHp: 380, damage: 18, speed: 30, gold: [60, 90],
         attackRate: [2.0, 1.2], windup: 0.6, dashSpeed: 200, dashTime: 0.55, hazardDamage: 15,
         frames: ['heroRun1', 'heroRun2'], idle: 'heroIdle', recolor: DARK_STEEL, weapon: 'sword', scale: 2,
+        line: '«Никто не войдёт в зал. Таков был приказ»',
     },
     demon: {
         id: 'demon', name: 'Демон', behavior: 'demon', boss: true, color: '#d9442b',
         w: 32, h: 34, maxHp: 480, damage: 15, speed: 40, gold: [90, 130],
         attackRate: [2.4, 1.6], shotDamage: 12, hazardDamage: 15,
         frames: ['demon'], scale: 2,
+        line: '«Корона горела красиво. Гори и ты»',
     },
 };

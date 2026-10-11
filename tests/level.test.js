@@ -108,14 +108,16 @@ test('все три локации собираются и содержат вс
     ]);
 });
 
-test('у каждой локации есть оформление и сюжетный текст', async () => {
-    const { STORY } = await import('../js/data/story.js');
+test('у каждой локации есть оформление, сюжетный текст и записки для всех костров', async () => {
+    const { STORY, LORE, PROLOGUE, EPILOGUE } = await import('../js/data/story.js');
     for (const def of LEVELS) {
+        const level = new Level(def);
         assert.ok(def.theme.sky && def.theme.far && def.theme.near, `${def.id}: цвета`);
         assert.ok(['trees', 'columns'].includes(def.theme.backdrop), `${def.id}: фон`);
         assert.ok(STORY[def.id].length > 50, `${def.id}: текст`);
+        assert.equal(LORE[def.id].length, level.checkpoints.length, `${def.id}: записка на каждый костёр`);
     }
-    assert.ok(STORY.victory.length > 50);
+    assert.ok(PROLOGUE.length >= 2 && EPILOGUE.length >= 2);
 });
 
 test('босс стоит в последнем сегменте, портал — за ним', () => {

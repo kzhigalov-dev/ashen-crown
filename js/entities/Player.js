@@ -94,7 +94,11 @@ export class Player extends Entity {
         if (!input.isDown('jump') && this.vy < cutSpeed) this.vy = cutSpeed;
 
         this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+        const wasAirborne = !this.onGround;
+        const fallSpeed = this.vy;
         this.onGround = moveAndCollide(this, level, dt).onGround;
+        // Приземление после заметного падения — для пыли и звука.
+        if (wasAirborne && this.onGround && fallSpeed > 150) this.events.push('land');
 
         if (!this.onGround) this.state = 'jump';
         else this.state = dir !== 0 ? 'run' : 'idle';

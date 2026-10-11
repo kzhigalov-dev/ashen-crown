@@ -24,6 +24,11 @@ const levelDef = {
     ]],
 };
 
+// Доигрывает до смены состояния (гибель героя показывается с паузой).
+function untilOver(game, max = 200) {
+    for (let i = 0; i < max && game.state === 'playing'; i++) game.update(STEP);
+}
+
 function setup() {
     const target = fakeTarget();
     const input = new InputHandler(target);
@@ -112,6 +117,9 @@ test('здоровье 0 — поражение', () => {
     game.player.hp = 20;
     game.player.y = game.level.height + 5;
     game.update(STEP);
+    assert.equal(game.state, 'playing', 'сначала пауза с разлетающимися частицами');
+    assert.ok(game.dying > 0);
+    untilOver(game);
     assert.equal(game.state, 'dead');
     assert.equal(input.capture, false);
 });
@@ -496,7 +504,7 @@ test('смерть: золото забега теряется, найденны
     game.collectItem(armorItem());
     game.player.hp = 20;
     game.player.y = game.level.height + 5;
-    game.update(STEP);
+    untilOver(game);
     assert.equal(game.state, 'dead');
     assert.equal(game.profile.gold, 0);
     assert.equal(save.load().inventory.items.length, 1);
@@ -763,8 +771,8 @@ test('урон герою, поражение и прохождение дают
     game.events = [];
     game.player.hp = 20;
     game.player.y = game.level.height + 5;
-    game.update(STEP);
-    assert.deepEqual(game.events, ['hurt', 'defeat']);
+    untilOver(game);
+    assert.deepEqual(game.events, ['hurt', 'death', 'defeat']);
 
     const second = arena();
     second.game.player.invuln = 99;
@@ -802,4 +810,119 @@ test('громкость: ограничена, уходит в звук и со
     again.continueGame();
     assert.equal(again.volume, 1);
     assert.equal(audio2.volume, 1, 'при загрузке громкость применяется');
+});
+
+// ---------- Ощущение игры и сюжет в уровне ----------
+
+test('попадание по врагу на миг замораживает кадр, нажатия не теряются', () => {
+    const { game, target } = arena();
+    game.tick(0);
+    game.tick(20);
+    game.player.x = 45;
+    target.dispatch('keydown', { code: 'KeyJ' });
+    game.tick(40);
+    assert.ok(game.freeze > 0, 'после попадания кадр замер');
+    let updates = 0;
+    const update = game.update.bind(game);
+    game.update = (dt) => { updates++; update(dt); };
+    target.dispatch('keydown', { code: 'Space' });
+    game.tick(57);
+    assert.equal(updates, 0, 'пока кадр заморожен, логика стоит');
+    assert.equal(game.input.wasPressed('jump'), true, 'нажатие дождётся следующего шага');
+    game.tick(140);
+    assert.ok(updates > 0);
+});
+
+test('урон герою: вспышка, тряска, счётчик попаданий', () => {
+    const { game, input } = arena();
+    game.player.x = 66;
+    run(game, input, 1);
+    assert.ok(game.hurtFlash > 0);
+    assert.equal(game.shake, 3);
+    assert.equal(game.stats.hits, 1);
+    run(game, input, 30);
+    assert.equal(game.shake, 0, 'тряска затухает');
+    assert.equal(game.hurtFlash, 0);
+});
+
+test('тряску можно отключить в настройках', () => {
+    const { game, input } = arena('swordsman', () => 0.5, { options: { shake: false } });
+    game.player.x = 66;
+    run(game, input, 1);
+    assert.equal(game.shake, 0);
+    assert.ok(game.hurtFlash > 0, 'вспышка остаётся');
+});
+
+test('прыжок и приземление поднимают пыль, рывок оставляет след', () => {
+    const { game, input, target } = arena();
+    run(game, input, 1);
+    const dust = () => game.effects.filter((effect) => effect.kind === 'particle').length;
+    target.dispatch('keydown', { code: 'Space' });
+    run(game, input, 1);
+    assert.equal(dust(), 4);
+    target.dispatch('keyup', { code: 'Space' });
+    run(game, input, 60);
+    assert.ok(game.events.includes('land'));
+
+    target.dispatch('keydown', { code: 'KeyK' });
+    run(game, input, 4);
+    assert.ok(game.trail.length >= 3);
+    run(game, input, 40);
+    assert.equal(game.trail.length, 0, 'след исчезает');
+});
+
+test('заставка локации идёт в начале уровня и заканчивается', () => {
+    const { game, input } = arena();
+    assert.ok(game.intro > 2);
+    run(game, input, 60 * 3);
+    assert.equal(game.intro, 0);
+});
+
+test('босс просыпается с объявлением и репликой, гибнет — с другим', () => {
+    const { game, input } = fight('#P.......T........E#');
+    game.player.invuln = 99;
+    run(game, input, 2);
+    assert.equal(game.banner.title, 'Древо-страж');
+    assert.match(game.banner.text, /Клятва/);
+    assert.ok(game.events.includes('bossWake'));
+    run(game, input, 60 * 4);
+    assert.equal(game.banner, null, 'объявление исчезает');
+    assert.equal(game.events.filter((name) => name === 'bossWake').length, 1, 'объявляется один раз');
+
+    game.enemies[0].hit(999, 'test', 1);
+    run(game, input, 2);
+    assert.match(game.banner.text, /повержен/);
+    assert.equal(game.stats.kills, 1);
+    assert.equal(game.shake > 0, true);
+});
+
+test('у костра лежит записка — своя для каждого костра локации', async () => {
+    const { LORE } = await import('../js/data/story.js');
+    const target = fakeTarget();
+    const input = new InputHandler(target);
+    const game = new Game({ levels: [{ ...levelDef, id: 'forest' }], input });
+    input.attach();
+    game.startLevel();
+    game.player.x = 67;
+    game.update(STEP);
+    assert.equal(game.lore.text, LORE.forest[0]);
+    run(game, input, 60 * 7);
+    assert.equal(game.lore, null, 'записка исчезает сама');
+});
+
+test('гибель героя: мир замирает, враги не добивают', () => {
+    const { game, input } = arena();
+    game.player.hp = 5;
+    game.player.x = 66;
+    run(game, input, 1);
+    assert.equal(game.player.dead, true);
+    const enemyX = game.enemies[0].x;
+    const hits = game.stats.hits;
+    run(game, input, 20);
+    assert.equal(game.state, 'playing');
+    assert.equal(game.enemies[0].x, enemyX, 'враги стоят');
+    assert.equal(game.stats.hits, hits);
+    assert.equal(game.effects.filter((effect) => effect.kind === 'particle').length > 0, true);
+    untilOver(game);
+    assert.equal(game.state, 'dead');
 });

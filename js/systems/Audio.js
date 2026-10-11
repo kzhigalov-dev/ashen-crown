@@ -10,6 +10,11 @@ export const SOUNDS = {
     hit: { wave: 'square', gain: 0.25, notes: [[200, 90, 0, 0.07]] },
     kill: { wave: 'square', gain: 0.3, notes: [[260, 60, 0, 0.18]] },
     hurt: { wave: 'sawtooth', gain: 0.35, notes: [[180, 70, 0, 0.2]] },
+    land: { wave: 'triangle', gain: 0.2, notes: [[140, 60, 0, 0.07]] },
+    death: { wave: 'sawtooth', gain: 0.4, notes: [[220, 40, 0, 0.5]] },
+    bossWake: { wave: 'sawtooth', gain: 0.4, notes: [[70, 110, 0, 0.35], [110, 45, 0.35, 0.6]] },
+    ui: { wave: 'square', gain: 0.12, notes: [[620, 620, 0, 0.03]] },
+    confirm: { wave: 'square', gain: 0.16, notes: [[520, 520, 0, 0.04], [780, 780, 0.04, 0.06]] },
     coin: { wave: 'square', gain: 0.2, notes: [[990, 990, 0, 0.05], [1320, 1320, 0.05, 0.09]] },
     item: { wave: 'triangle', gain: 0.35, notes: [[660, 660, 0, 0.08], [880, 880, 0.08, 0.08], [1320, 1320, 0.16, 0.16]] },
     heal: { wave: 'triangle', gain: 0.3, notes: [[440, 660, 0, 0.25]] },
@@ -24,6 +29,14 @@ export const SOUNDS = {
     },
 };
 
+// Фоновый гул локаций: две низкие ноты (Гц), которые медленно «дышат».
+export const AMBIENCE = {
+    menu: [55, 82.4],
+    forest: [65.4, 98],
+    castle: [58.3, 87.3],
+    dungeon: [49, 73.4],
+};
+
 // Синтез звуков через Web Audio. Звуковых файлов нет.
 // createContext — функция, создающая AudioContext; в тестах подставляется подмена.
 export class AudioSystem {
@@ -31,6 +44,9 @@ export class AudioSystem {
         this.createContext = createContext;
         this.context = null;
         this.volume = 0.5;
+        this.musicVolume = 0.3;
+        this.ambience = null;      // { name, nodes, gain } — звучащий сейчас фон
+        this.wanted = null;        // какой фон должен звучать (ждёт разблокировки звука)
     }
 
     // Браузеры разрешают звук только после действия пользователя,
@@ -42,6 +58,45 @@ export class AudioSystem {
         } catch {
             this.context = null;  // звук недоступен — игра работает молча
         }
+        if (this.wanted) this.startAmbience(this.wanted);
+    }
+
+    setMusicVolume(volume) {
+        this.musicVolume = Math.max(0, Math.min(1, volume));
+        if (this.ambience) this.ambience.gain.gain.value = this.musicLevel();
+    }
+
+    // Фон намеренно тихий: это атмосфера, а не мелодия.
+    musicLevel() {
+        return this.musicVolume * 0.12;
+    }
+
+    // Включает фоновый гул локации. Повторный вызов с тем же именем ничего не меняет.
+    startAmbience(name) {
+        this.wanted = name;
+        if (!this.context || !AMBIENCE[name] || this.ambience?.name === name) return;
+        this.stopAmbience();
+        this.wanted = name;
+        const { context } = this;
+        const gain = context.createGain();
+        gain.gain.value = this.musicLevel();
+        gain.connect(context.destination);
+        const nodes = AMBIENCE[name].map((frequency, index) => {
+            const oscillator = context.createOscillator();
+            oscillator.type = index === 0 ? 'sine' : 'triangle';
+            oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+            oscillator.connect(gain);
+            oscillator.start(context.currentTime);
+            return oscillator;
+        });
+        this.ambience = { name, nodes, gain };
+    }
+
+    stopAmbience() {
+        this.wanted = null;
+        if (!this.ambience) return;
+        for (const node of this.ambience.nodes) node.stop(this.context.currentTime);
+        this.ambience = null;
     }
 
     setVolume(volume) {

@@ -28,6 +28,15 @@ export const COIN_VALUE = 5;
 export const CAMERA_LERP = 8;
 // Сколько секунд на экране висит название подобранного предмета
 export const NOTICE_TIME = 2;
+
+// Ощущение игры
+export const DEATH_TIME = 0.8;     // пауза между гибелью героя и экраном поражения
+export const INTRO_TIME = 2.4;     // заставка с названием локации в начале уровня
+export const BANNER_TIME = 3.2;    // сколько висит объявление о боссе
+export const LORE_TIME = 6;        // сколько видна записка у костра
+export const SHAKE_DECAY = 24;     // на сколько пикселей в секунду затухает тряска
+export const HITSTOP = 0.035;      // замирание кадра при попадании по врагу
+export const HURT_FLASH = 0.3;     // красная вспышка при уроне герою
 // Сколько слизней босс может держать призванными одновременно
 export const MAX_SUMMONED = 2;
 // Огненные столбы подземелья: период срабатывания и урон

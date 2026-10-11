@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AudioSystem, SOUNDS } from '../js/systems/Audio.js';
+import { AudioSystem, SOUNDS, AMBIENCE } from '../js/systems/Audio.js';
 
 // Подмена AudioContext: запоминает созданные осцилляторы и их громкость.
 function fakeContext() {
@@ -27,7 +27,7 @@ function fakeContext() {
             return oscillator;
         },
         createGain() {
-            const gain = { gain: param(), connect() {} };
+            const gain = { gain: { ...param(), value: 1 }, connect() {} };
             this.gains.push(gain);
             return gain;
         },
@@ -115,4 +115,44 @@ test('все звуки описаны корректно', () => {
             assert.ok(start >= 0 && duration > 0, name);
         }
     }
+});
+
+// ---------- Фон ----------
+
+test('фон: два осциллятора на локацию, повторный запуск ничего не дублирует', () => {
+    const { audio, context } = unlocked();
+    audio.startAmbience('forest');
+    assert.equal(context.oscillators.length, 2);
+    assert.deepEqual(context.oscillators.map((o) => o.frequency.calls[0][1]), AMBIENCE.forest);
+    audio.startAmbience('forest');
+    assert.equal(context.oscillators.length, 2);
+});
+
+test('фон: смена локации останавливает прежний', () => {
+    const { audio, context } = unlocked();
+    audio.startAmbience('forest');
+    audio.startAmbience('dungeon');
+    assert.equal(context.oscillators.length, 4);
+    assert.ok(context.oscillators[0].stopped !== null && context.oscillators[1].stopped !== null);
+    assert.equal(context.oscillators[2].stopped, null);
+    audio.stopAmbience();
+    assert.ok(context.oscillators[3].stopped !== null);
+});
+
+test('фон: заказанный до разблокировки звука включается после неё', () => {
+    const context = fakeContext();
+    const audio = new AudioSystem(() => context);
+    audio.startAmbience('menu');
+    assert.equal(context.oscillators.length, 0);
+    audio.unlock();
+    assert.equal(context.oscillators.length, 2);
+});
+
+test('фон: громкость меняется на лету и остаётся тихой', () => {
+    const { audio, context } = unlocked();
+    audio.startAmbience('castle');
+    audio.setMusicVolume(1);
+    assert.ok(context.gains.at(-1).gain.value <= 0.15, 'фон тише эффектов даже на максимуме');
+    audio.setMusicVolume(0);
+    assert.equal(context.gains.at(-1).gain.value, 0);
 });
