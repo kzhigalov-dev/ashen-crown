@@ -83,4 +83,6 @@ test('Уровень «Проклятый лес» собирается и со�
     assert.equal(level.cols, 160);
     assert.equal(level.coins.length, 20);
     assert.equal(level.checkpoints.length, 2);
+    assert.equal(level.enemies.filter((e) => e.type === 'slime').length, 5);
+    assert.equal(level.enemies.filter((e) => e.type === 'wolf').length, 3);
 });

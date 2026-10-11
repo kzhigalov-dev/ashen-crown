@@ -15,9 +15,20 @@ const SIZES = {
     campfire: [10, 10],
     campfireOff: [10, 2],
     portal: [12, 16],
+    sword: [3, 12],
+    bow: [4, 12],
+    staff: [3, 16],
+    slash: [12, 18],
+    arrow: [8, 3],
+    arrowBright: [8, 3],
+    bolt: [6, 6],
+    slime1: [14, 10],
+    slime2: [14, 10],
+    wolf1: [20, 12],
+    wolf2: [20, 12],
 };
 
-test('есть все спрайты этапа 1', () => {
+test('есть все спрайты', () => {
     assert.deepEqual(Object.keys(SPRITES).sort(), Object.keys(SIZES).sort());
 });
 

@@ -35,6 +35,7 @@ test('у каждого класса есть всё, что нужно инте
         assert.ok(def.name && def.description, `${id}: имя и описание`);
         assert.ok(def.weapon, `${id}: оружие`);
         for (const key of ['h', 'H', 'c', 'C']) assert.ok(def.palette[key], `${id}: цвет ${key}`);
+        assert.ok(def.attack.name, `${id}: название атаки`);
         assert.ok(def.ability.name, `${id}: название способности`);
     }
 });

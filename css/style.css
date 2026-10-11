@@ -123,3 +123,48 @@ button:focus-visible {
 .keys dd {
     margin: 0;
 }
+
+/* Экран выбора класса */
+.class-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1em;
+    width: 100%;
+    max-width: 58em;
+}
+
+.class-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5em;
+    min-width: 0;
+    padding: 1em 0.8em;
+    line-height: 1.4;
+}
+
+.class-card strong {
+    font-size: 1.3em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+
+.class-card small {
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+/* Спрайт 12×22 увеличен без сглаживания. */
+.portrait {
+    width: 3.6em;
+    height: 6.6em;
+    image-rendering: pixelated;
+}
+
+button.quiet {
+    min-width: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+}

@@ -31,6 +31,12 @@ export const PALETTE = {
     m: '#7a3fd1',    // портал
     M: '#c08bff',    // портал, свет
     n: '#5a5560',    // камень
+    j: '#58b368',    // слизень
+    J: '#9be0a0',    // слизень, блик
+    q: '#2f7a45',    // слизень, тень
+    u: '#6a6f7d',    // шерсть волка
+    U: '#9aa0ad',    // шерсть, свет
+    v: '#3c4050',    // шерсть, тень
 };
 
 const HERO_TOP = [
@@ -99,6 +105,30 @@ const CAMPFIRE = [
     '..rrrrr...',
     'kppkkkppk.',
     '.kpppppk..',
+];
+
+const SLIME_BODY = [
+    '..kkjJJJjjkk..',
+    '.kjJJjjjjjjjk.',
+    'kjjjkjjjjkjjjk',
+    'kjjjkjjjjkjjjk',
+    'kjjjjjjjjjjjjk',
+    'kjjqjjjjjjqjjk',
+    'kqqqqqqqqqqqqk',
+    '.kkkkkkkkkkkk.',
+];
+
+// Волк нарисован мордой вправо.
+const WOLF_BODY = [
+    '..............kk.k..',
+    '.............kuukuk.',
+    'k...........kuuuuuuk',
+    'kk.kkkkkkkkkuuUuuruk',
+    '.kkuUUUUUUUuuuuuuuuk',
+    '.kuuUUUUUUuuuuuukkk.',
+    '.kuuuuuuuuuuuuuuk...',
+    '.kuuvvvvvvvvvvuuk...',
+    '.kuuk.kkkkkk.kuuk...',
 ];
 
 export const SPRITES = {
@@ -196,5 +226,121 @@ export const SPRITES = {
         'nmmmMMMMmmmn',
         'nnmmmmmmmmnn',
         'nnnnnnnnnnnn',
+    ],
+
+    // Оружие в руке героя (герой смотрит вправо).
+    sword: [
+        '.X.',
+        '.X.',
+        '.X.',
+        '.X.',
+        '.X.',
+        '.X.',
+        '.X.',
+        '.X.',
+        'bbb',
+        '.p.',
+        '.p.',
+        '.k.',
+    ],
+
+    bow: [
+        '.p..',
+        'wPp.',
+        'w.Pp',
+        'w..p',
+        'w..p',
+        'w..p',
+        'w..p',
+        'w..p',
+        'w..p',
+        'w.Pp',
+        'wPp.',
+        '.p..',
+    ],
+
+    staff: [
+        '.M.',
+        'MwM',
+        '.M.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+        '.p.',
+    ],
+
+    // След от взмаха меча.
+    slash: [
+        '....ww......',
+        '......ww....',
+        '........w...',
+        '.........w..',
+        '..........w.',
+        '..........ww',
+        '..........Xw',
+        '..........Xw',
+        '..........Xw',
+        '..........Xw',
+        '..........Xw',
+        '..........Xw',
+        '..........ww',
+        '..........w.',
+        '.........w..',
+        '........w...',
+        '......ww....',
+        '....ww......',
+    ],
+
+    arrow: [
+        'w.....X.',
+        'wpppppXX',
+        'w.....X.',
+    ],
+
+    arrowBright: [
+        'Y.....Y.',
+        'YyyyyyYY',
+        'Y.....Y.',
+    ],
+
+    bolt: [
+        '.mMMm.',
+        'mMwwMm',
+        'MwwwwM',
+        'MwwwwM',
+        'mMwwMm',
+        '.mMMm.',
+    ],
+
+    // Слизень: высокий кадр и приплюснутый — вместе дают «дыхание».
+    slime1: [
+        '....kkkkkk....',
+        SLIME_BODY[0],
+        SLIME_BODY[1],
+        '.kjJjjjjjjjjk.',
+        ...SLIME_BODY.slice(2),
+    ],
+    slime2: ['..............', '....kkkkkk....', ...SLIME_BODY],
+
+    wolf1: [
+        ...WOLF_BODY,
+        '.kvvk........kvvk...',
+        '.kvvk........kvvk...',
+        '.kkkk........kkkk...',
+    ],
+    wolf2: [
+        ...WOLF_BODY,
+        'kvvk..........kvvk..',
+        'kvk............kvvk.',
+        'kk..............kkk.',
     ],
 };
