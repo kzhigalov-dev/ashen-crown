@@ -34,6 +34,41 @@ function run(boss, seconds, player) {
 
 const ofType = (actions, type) => actions.filter((action) => action.type === type);
 
+test('босс спит, пока герой далеко, и просыпается у входа на арену', () => {
+    for (const type of ['treant', 'knight', 'demon']) {
+        const boss = new Boss(type, 240, 80);
+        const startX = boss.x;
+        const far = hero({ x: -400 });
+        const actions = run(boss, 8, far);
+        assert.equal(boss.awake, false, type);
+        assert.equal(actions.length, 0, `${type}: спящий не атакует`);
+        assert.equal(boss.x, startX, `${type}: спящий не двигается`);
+        run(boss, 0.1, hero({ x: 60 }));
+        assert.equal(boss.awake, true, type);
+    }
+});
+
+test('Рыцарь не покидает арену', () => {
+    const boss = new Boss('knight', 240, 80);
+    boss.awake = true;
+    const lure = hero({ x: -400 });   // герой далеко слева за ареной
+    let minX = boss.x;
+    for (let i = 0; i < 60 * 20; i++) {
+        boss.update(STEP, arena, lure);
+        boss.takeActions();
+        minX = Math.min(minX, boss.x);
+    }
+    assert.ok(minX >= boss.minX - 4, `ушёл до ${minX}, граница ${boss.minX}`);
+});
+
+test('Демон держится сбоку от героя, а не над ним', () => {
+    const boss = new Boss('demon', 240, 80);
+    const player = hero({ x: 150 });
+    run(boss, 10, player);
+    const gap = Math.abs(boss.x + boss.w / 2 - 155);
+    assert.ok(gap > 60 && gap < 80, `расстояние по горизонтали ${gap}`);
+});
+
 test('босс не оглушается и не отбрасывается, тот же удар дважды не ранит', () => {
     const boss = new Boss('treant', 160, 80);
     assert.equal(boss.hit(20, 'a', 1), true);
@@ -92,7 +127,7 @@ test('Рыцарь: идёт к герою', () => {
     assert.equal(boss.facing, -1);
 });
 
-test('Рыцарь: после замаха несётся через арену и упирается в стену', () => {
+test('Рыцарь: после замаха делает рывок ограниченной длины', () => {
     const boss = new Boss('knight', 240, 80);
     const player = hero();
     run(boss, 1.6, player);
@@ -101,8 +136,8 @@ test('Рыцарь: после замаха несётся через арену
     run(boss, 0.3, player);
     assert.equal(boss.x, before, 'во время замаха стоит');
     run(boss, 1.2, player);
-    assert.ok(boss.x < before - 100, `пролетел ${before - boss.x}`);
-    assert.ok(boss.x >= 16, 'не прошёл сквозь стену');
+    const flown = before - boss.x;
+    assert.ok(flown > 90 && flown < 125, `пролетел ${flown}: от рывка можно отбежать`);
 });
 
 test('Рыцарь: вторая атака — прыжок, при приземлении ударная волна в обе стороны', () => {

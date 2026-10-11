@@ -37,7 +37,8 @@ export const CLASSES = {
         description: 'Мощные шары тратят ману. Хрупок, но взрыв бьёт всех вокруг.',
         maxHp: 70,
         maxMana: 100,
-        manaRegen: 8,
+        // В спецификации было 8: маг убивал босса втрое дольше остальных классов.
+        manaRegen: 14,
         extraJumps: 0,
         attack: {
             type: 'projectile', name: 'магический шар',

@@ -1,5 +1,6 @@
 import { SLOTS, SLOT_NAMES, STATS, STAT_ORDER, INVENTORY_SIZE } from '../data/items.js';
 import { rarityOf, dismantleValue } from '../systems/Loot.js';
+import { STORY } from '../data/story.js';
 
 // HTML-экраны поверх игрового поля: меню, выбор класса, карта, снаряжение,
 // пауза, победа, поражение.
@@ -11,6 +12,8 @@ export class Screens {
             menu: byId('screen-menu'),
             classSelect: byId('screen-class'),
             map: byId('screen-map'),
+            story: byId('screen-story'),
+            victory: byId('screen-victory'),
             equipment: byId('screen-equipment'),
             paused: byId('screen-paused'),
             complete: byId('screen-complete'),
@@ -89,6 +92,11 @@ export class Screens {
             this.renderMap(game);
         } else if (state === 'equipment') {
             this.renderEquipment(game);
+        } else if (state === 'story') {
+            this.byId('story-title').textContent = game.levelDef.name;
+            this.byId('story-text').textContent = STORY[game.levelDef.id] ?? '';
+        } else if (state === 'victory') {
+            this.byId('victory-text').textContent = STORY.victory;
         }
 
         // Фокус на выбранный предмет или первую доступную кнопку —
@@ -104,6 +112,7 @@ export class Screens {
         const { profile, levels } = game;
         this.byId('map-gold').textContent = profile.gold;
         this.byId('map-best').textContent = profile.bestRun;
+        this.byId('map-cleared').hidden = profile.unlocked <= levels.length;
         const list = this.byId('map-list');
         list.replaceChildren();
         levels.forEach((level, index) => {

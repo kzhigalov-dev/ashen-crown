@@ -83,6 +83,21 @@ test('шипы не ранят, пока ноги выше нарисованн�
     assert.equal(game.player.hp, 120);
 });
 
+test('костёр один раз за забег полностью лечит', () => {
+    const { game } = setup();
+    game.player.hp = 30;
+    game.player.x = 67;
+    game.update(STEP);
+    assert.equal(game.player.hp, 120);
+    assert.match(game.notice.text, /Костёр/);
+    game.player.hp = 30;
+    game.player.x = 20;
+    game.update(STEP);
+    game.player.x = 67;
+    game.update(STEP);
+    assert.equal(game.player.hp, 30, 'второй раз тот же костёр не лечит');
+});
+
 test('падение в яму без костра возвращает на старт', () => {
     const { game } = setup();
     game.player.y = game.level.height + 5;

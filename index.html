@@ -37,8 +37,23 @@
             <h2>Карта</h2>
             <p class="hint">Золото: <strong id="map-gold">0</strong> · Рекорд за уровень: <strong id="map-best">0</strong></p>
             <div id="map-list" class="map-list"></div>
+            <p id="map-cleared" class="hint" hidden>Проклятие снято. Локации открыты для охоты за снаряжением.</p>
             <button data-action="equipment">Снаряжение</button>
             <button data-action="menu" class="quiet">В меню</button>
+        </section>
+
+        <section id="screen-story" class="screen" hidden>
+            <h2 id="story-title"></h2>
+            <p id="story-text" class="story"></p>
+            <button data-action="begin">В путь</button>
+            <button data-action="map" class="quiet">Назад</button>
+        </section>
+
+        <section id="screen-victory" class="screen" hidden>
+            <h2>Корона возвращена</h2>
+            <p id="victory-text" class="story"></p>
+            <p>Собрано золота: <strong data-gold>0</strong></p>
+            <button data-action="map">На карту</button>
         </section>
 
         <section id="screen-equipment" class="screen" hidden>

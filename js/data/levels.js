@@ -2,13 +2,18 @@
 //   .  пусто            #  земля            =  платформа (можно запрыгнуть снизу)
 //   ^  шипы             ~  лава             P  появление героя
 //   C  костёр           o  золото           E  портал-выход
-//   s  слизень          w  волк
-// Каждый сегмент — 17 строк по 20 символов.
+//   s  слизень          w  волк             z  скелет-мечник
+//   a  скелет-лучник    i  бес              f  огненный столб
+//   T  Древо-страж      K  Чёрный рыцарь    D  Демон
+// Каждый сегмент — 17 строк по 20 символов. Уровень — сегменты слева направо,
+// последний сегмент — арена босса с порталом.
 
 const E = '....................';
 const G = '####################';
 
-const START = [
+// ---------- Проклятый лес ----------
+
+const FOREST_START = [
     E, E, E, E, E, E, E, E, E, E, E, E, E,
     '..........o.o.o.....',
     '..P.............s...',
@@ -16,7 +21,7 @@ const START = [
     G,
 ];
 
-const PLATFORMS = [
+const FOREST_PLATFORMS = [
     E, E, E, E, E, E, E, E, E, E,
     '...........ooo......',
     '..........=====.....',
@@ -27,7 +32,7 @@ const PLATFORMS = [
     G,
 ];
 
-const FIRST_PIT = [
+const FOREST_PIT = [
     E, E, E, E, E, E, E, E, E, E, E, E,
     '........ooo.........',
     E,
@@ -36,7 +41,7 @@ const FIRST_PIT = [
     '########...#########',
 ];
 
-const CAMPFIRE_AND_SPIKES = [
+const FOREST_SPIKES = [
     E, E, E, E, E, E, E, E, E, E, E, E,
     '...........oo.......',
     E,
@@ -45,7 +50,7 @@ const CAMPFIRE_AND_SPIKES = [
     G,
 ];
 
-const STAIRS = [
+const FOREST_STAIRS = [
     E, E, E, E, E, E, E, E, E,
     '..............o.o...',
     '................w...',
@@ -57,7 +62,7 @@ const STAIRS = [
     G,
 ];
 
-const CHASM = [
+const FOREST_CHASM = [
     E, E, E, E, E, E, E, E, E,
     '......o....o........',
     E,
@@ -69,7 +74,7 @@ const CHASM = [
     '####............####',
 ];
 
-const DESCENT = [
+const FOREST_DESCENT = [
     E, E, E, E, E, E, E, E, E, E, E,
     '####................',
     '####................',
@@ -79,24 +84,213 @@ const DESCENT = [
     G,
 ];
 
-const FINALE = [
+const FOREST_FINALE = [
     E, E, E, E, E, E, E, E, E, E,
     '...............ooo..',
     E,
     '..........o.........',
     '.........===........',
-    '..........w..s....E.',
+    '..........w..s......',
     G,
     G,
 ];
 
+const FOREST_ARENA = [
+    E, E, E, E, E, E, E, E, E, E, E, E, E, E,
+    '............T....E..',
+    G,
+    G,
+];
+
+// ---------- Разрушенный замок ----------
+
+const CASTLE_START = [
+    E, E, E, E, E, E, E, E, E, E, E, E, E,
+    '...........o.o......',
+    '..P..............z..',
+    G,
+    G,
+];
+
+const CASTLE_BATTLEMENTS = [
+    E, E, E, E, E, E, E, E, E, E,
+    '..............o.....',
+    E,
+    '..............a.....',
+    '.....o.......###....',
+    '....###..^^..###....',
+    G,
+    G,
+];
+
+const CASTLE_BRIDGE = [
+    E, E, E, E, E, E, E, E, E, E, E,
+    '.......o....o.......',
+    E,
+    '......===..===......',
+    '.................z..',
+    '#####..........#####',
+    '#####..........#####',
+];
+
+const CASTLE_STAIRS = [
+    E, E, E, E, E, E, E, E, E,
+    '..............o.o...',
+    '.................a..',
+    '............########',
+    '.........z..########',
+    '........############',
+    '.C..################',
+    G,
+    G,
+];
+
+const CASTLE_WALKWAY = [
+    E, E, E, E, E, E, E, E, E,
+    '........o....o......',
+    E,
+    '######..==...==..###',
+    '######...........###',
+    '######...........###',
+    '######...........###',
+    '######^^^^^^^^^^^###',
+    G,
+];
+
+const CASTLE_DESCENT = [
+    E, E, E, E, E, E, E, E, E, E, E,
+    '####................',
+    '####......o.o.o.....',
+    '########............',
+    '########..C...z..z..',
+    G,
+    G,
+];
+
+const CASTLE_ARENA = [
+    E, E, E, E, E, E, E, E, E, E, E, E, E, E,
+    '............K....E..',
+    G,
+    G,
+];
+
+// ---------- Пылающее подземелье ----------
+
+const DUNGEON_START = [
+    E, E, E, E, E, E, E, E, E, E, E, E, E,
+    '..........o.o.......',
+    '..P..............z..',
+    G,
+    G,
+];
+
+const DUNGEON_POOLS = [
+    E, E, E, E, E, E, E, E, E, E,
+    '.........i..........',
+    E,
+    '......o......o......',
+    E,
+    '...f............f...',
+    '#####~~~###~~~######',
+    G,
+];
+
+const DUNGEON_LAKE = [
+    E, E, E, E, E, E, E, E, E,
+    '.......o.....o......',
+    '..........i.........',
+    '.......==....==.....',
+    E,
+    '....===...===..===..',
+    E,
+    '###~~~~~~~~~~~~~~###',
+    G,
+];
+
+const DUNGEON_CORRIDOR = [
+    E, E, E, E, E, E, E, E, E, E, E, E, E,
+    '.......o.......o....',
+    '.C...f...z...f...z..',
+    G,
+    G,
+];
+
+const DUNGEON_STAIRS = [
+    E, E, E, E, E, E, E, E,
+    '..............i.....',
+    '..............o.o...',
+    E,
+    '............########',
+    '............########',
+    '........############',
+    '....################',
+    G,
+    G,
+];
+
+const DUNGEON_CHASM = [
+    E, E, E, E, E, E, E, E, E,
+    '......o....o........',
+    E,
+    '####..==...==...####',
+    '####............####',
+    '####............####',
+    '####............####',
+    '####~~~~~~~~~~~~####',
+    G,
+];
+
+const DUNGEON_DESCENT = [
+    E, E, E, E, E, E, E, E, E, E, E,
+    '####................',
+    '####................',
+    '########............',
+    '########..C.........',
+    G,
+    G,
+];
+
+const DUNGEON_ARENA = [
+    E, E, E, E, E, E, E, E, E, E, E, E, E, E,
+    '............D....E..',
+    G,
+    G,
+];
+
+// theme — оформление локации: цвета неба и фона, вид силуэтов на фоне
+// и перекраска тайлов земли (ключи — символы палитры из data/sprites.js).
 export const LEVELS = [
     {
         id: 'forest',
         name: 'Проклятый лес',
+        theme: { sky: '#141b2b', far: '#1a2c33', near: '#21403a', backdrop: 'trees', tiles: null },
         segments: [
-            START, PLATFORMS, FIRST_PIT, CAMPFIRE_AND_SPIKES,
-            STAIRS, CHASM, DESCENT, FINALE,
+            FOREST_START, FOREST_PLATFORMS, FOREST_PIT, FOREST_SPIKES,
+            FOREST_STAIRS, FOREST_CHASM, FOREST_DESCENT, FOREST_FINALE, FOREST_ARENA,
+        ],
+    },
+    {
+        id: 'castle',
+        name: 'Разрушенный замок',
+        theme: {
+            sky: '#16161f', far: '#20212c', near: '#2b2d3a', backdrop: 'columns',
+            tiles: { G: '#9aa0ad', g: '#6a6f7d', d: '#4a4d5a', D: '#5f6372', e: '#3a3c48' },
+        },
+        segments: [
+            CASTLE_START, CASTLE_BATTLEMENTS, CASTLE_BRIDGE, CASTLE_STAIRS,
+            CASTLE_WALKWAY, CASTLE_DESCENT, CASTLE_ARENA,
+        ],
+    },
+    {
+        id: 'dungeon',
+        name: 'Пылающее подземелье',
+        theme: {
+            sky: '#1a0f12', far: '#2a1416', near: '#3d1a18', backdrop: 'columns',
+            tiles: { G: '#a8492e', g: '#6e2f22', d: '#33201f', D: '#4a2a26', e: '#221514' },
+        },
+        segments: [
+            DUNGEON_START, DUNGEON_POOLS, DUNGEON_LAKE, DUNGEON_CORRIDOR,
+            DUNGEON_STAIRS, DUNGEON_CHASM, DUNGEON_DESCENT, DUNGEON_ARENA,
         ],
     },
 ];

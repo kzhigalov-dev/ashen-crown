@@ -4,13 +4,21 @@ import { GRAVITY, MAX_FALL, TILE } from '../data/constants.js';
 
 const FLASH_TIME = 0.12;
 const TELEGRAPH = 0.6;      // сколько видна метка перед срабатыванием ловушки
+const WAKE_DISTANCE = 210;  // герой ближе — босс просыпается (вход на арену)
+const ARENA_LEFT = 190;     // на сколько босс может уйти влево от места появления
+const ARENA_RIGHT = 90;     // и вправо
+const DEMON_GAP = 70;       // на каком расстоянии сбоку от героя держится Демон
 
 // Босс. В отличие от обычного врага, не оглушается и не отбрасывается,
 // а после потери половины здоровья атакует чаще (вторая фаза).
+// Спит, пока герой не подойдёт, и не покидает свою арену.
 export class Boss extends Enemy {
     constructor(type, x, y) {
         super(type, x, y);
+        this.awake = false;
         this.floorY = y + TILE;             // уровень пола арены
+        this.minX = this.x - ARENA_LEFT;    // границы арены
+        this.maxX = this.x + ARENA_RIGHT;
         this.attackTimer = 1.5;             // пауза перед первой атакой
         this.summonTimer = this.def.summonRate ?? 0;
         this.state = 'walk';                // для рыцаря: walk, windup, dash, jump, rest
@@ -31,9 +39,21 @@ export class Boss extends Enemy {
     update(dt, level, player) {
         this.animTime += dt;
         this.flash = Math.max(0, this.flash - dt);
+
+        if (!this.awake) {
+            const distance = Math.abs(this.centerX(player) - this.centerX(this));
+            if (!player.dead && distance < WAKE_DISTANCE) this.awake = true;
+        }
+        if (!this.awake) {
+            // Спящий босс стоит (или парит) на месте и не атакует.
+            if (this.def.behavior === 'demon') this.hover();
+            else this.walk(dt, level, 0, 0, false);
+            return;
+        }
+
         if (this.def.behavior === 'treant') this.treant(dt, level, player);
         else if (this.def.behavior === 'knight') this.knight(dt, level, player);
-        else this.demon(dt, level, player);
+        else this.demon(dt, player);
     }
 
     // Ловушка с предупреждением: метка на полу, потом удар.
@@ -65,17 +85,18 @@ export class Boss extends Enemy {
         }
     }
 
-    // Чёрный рыцарь: идёт к герою и чередует рывок через арену и прыжок с ударной волной.
+    // Чёрный рыцарь: идёт к герою и чередует рывок с замахом и прыжок с ударной волной.
     knight(dt, level, player) {
+        const { speed, dashSpeed, dashTime, windup } = this.def;
         let vx = 0;
         if (this.state === 'walk') {
             this.face(player);
-            vx = this.facing * this.def.speed;
+            vx = this.facing * speed;
             this.attackTimer -= dt;
             if (this.attackTimer <= 0 && !player.dead) {
                 if (this.nextAttack++ % 2 === 0) {
                     this.state = 'windup';
-                    this.stateTimer = 0.5;
+                    this.stateTimer = windup;
                 } else {
                     // Прыжок рассчитан так, чтобы приземлиться около героя.
                     this.state = 'jump';
@@ -86,16 +107,16 @@ export class Boss extends Enemy {
                 }
             }
         } else if (this.state === 'windup') {
-            // Замах перед рывком: рыцарь стоит и мигает — время отойти или перепрыгнуть.
-            this.flash = FLASH_TIME;
+            // Замах перед рывком: рыцарь стоит и мигает (см. Renderer) —
+            // время отбежать.
             this.stateTimer -= dt;
             if (this.stateTimer <= 0) {
                 this.state = 'dash';
-                this.stateTimer = 0.8;
+                this.stateTimer = dashTime;
                 this.dashDir = this.facing;
             }
         } else if (this.state === 'dash') {
-            vx = this.dashDir * this.def.dashSpeed;
+            vx = this.dashDir * dashSpeed;
             this.stateTimer -= dt;
         } else if (this.state === 'jump') {
             vx = this.dashDir;
@@ -107,13 +128,15 @@ export class Boss extends Enemy {
             }
         }
 
-        this.vx = vx;
+        // Край арены для рыцаря — как стена.
+        const atEdge = (vx < 0 && this.x <= this.minX) || (vx > 0 && this.x >= this.maxX);
+        this.vx = atEdge ? 0 : vx;
         this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
         const wasAirborne = !this.onGround;
         const hit = moveAndCollide(this, level, dt);
         this.onGround = hit.onGround;
 
-        if (this.state === 'dash' && (hit.hitWall || this.stateTimer <= 0)) this.rest();
+        if (this.state === 'dash' && (hit.hitWall || atEdge || this.stateTimer <= 0)) this.rest();
         if (this.state === 'jump' && wasAirborne && this.onGround) {
             // Приземление: ударная волна по полу в обе стороны.
             this.hazard('shock', this.x - 20, 40, 10, 0, 0.2);
@@ -127,19 +150,23 @@ export class Boss extends Enemy {
         this.stateTimer = 0.6;
     }
 
-    // Демон: парит над ареной, следует за героем и чередует залп шаров и огненные столбы.
-    demon(dt, level, player) {
-        const targetX = this.centerX(player);
-        const distance = targetX - this.centerX(this);
-        if (Math.abs(distance) > 8) {
-            const nextX = this.x + Math.sign(distance) * this.def.speed * dt;
-            // Не залетает в стены арены.
-            if (nextX > TILE && nextX + this.w < level.width - TILE) this.x = nextX;
-        }
-        this.face(player);
-        // Высота меняется: то опускается под удар меча, то поднимается.
+    // Высота Демона меняется: то опускается под удар меча, то поднимается.
+    hover() {
         const lift = 34 + Math.sin(this.animTime * 1.2) * 16;
         this.y = this.floorY - lift - this.h;
+    }
+
+    // Демон: парит сбоку от героя (не прямо над ним — иначе в него не попасть
+    // стрелой) и чередует залп огненных шаров и огненные столбы.
+    demon(dt, player) {
+        const heroX = this.centerX(player);
+        const side = this.centerX(this) < heroX ? -1 : 1;
+        const half = this.w / 2;
+        const wanted = Math.max(this.minX + half, Math.min(this.maxX + half, heroX + side * DEMON_GAP));
+        const distance = wanted - this.centerX(this);
+        if (Math.abs(distance) > 4) this.x += Math.sign(distance) * this.def.speed * dt;
+        this.face(player);
+        this.hover();
 
         this.attackTimer -= dt;
         if (this.attackTimer > 0 || player.dead) return;
@@ -152,11 +179,11 @@ export class Boss extends Enemy {
                 this.actions.push({
                     type: 'shot', kind: 'fireball', damage: this.def.shotDamage,
                     dir: this.facing, x: origin.x, y: origin.y,
-                    target: { x: targetX + spread, y: player.y + player.h / 2 },
+                    target: { x: heroX + spread, y: player.y + player.h / 2 },
                 });
             }
         } else {
-            for (const offset of [-56, 0, 56]) this.hazard('pillar', targetX + offset, 12, 44, 0.7, 0.5);
+            for (const offset of [-56, 0, 56]) this.hazard('pillar', heroX + offset, 12, 44, 0.7, 0.5);
         }
     }
 

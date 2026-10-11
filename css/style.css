@@ -285,3 +285,8 @@ button:disabled {
     min-width: 0;
     width: 100%;
 }
+
+.screen p.story {
+    max-width: 40em;
+    line-height: 1.7;
+}

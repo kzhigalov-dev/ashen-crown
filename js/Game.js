@@ -49,6 +49,7 @@ export class Game {
         this.effects = [];          // короткие вспышки для отрисовки (взрыв мага)
         this.notice = null;         // всплывающая надпись: { text, color, ttl }
         this.checkpoint = null;
+        this.rested = new Set();
         this.gold = 0;              // золото текущего забега
         this.time = 0;
         this.camera = { x: 0, y: 0 };
@@ -182,6 +183,7 @@ export class Game {
         this.player = new Player(classDef, { bonus: this.profile.inventory.totals(), rng: this.rng });
         this.player.placeAt(this.level.spawn);
         this.checkpoint = this.level.spawn;
+        this.rested = new Set();    // костры, у которых герой уже лечился
         this.coins = this.level.coins.map((coin) => ({ ...coin, taken: false }));
         this.enemies = this.level.enemies.map((spawn) => this.createEnemy(spawn.type, spawn.x, spawn.y));
         this.projectiles = [];
@@ -287,7 +289,15 @@ export class Game {
         }
 
         for (const checkpoint of level.checkpoints) {
-            if (overlaps(player, checkpoint)) this.checkpoint = checkpoint;
+            if (!overlaps(player, checkpoint)) continue;
+            this.checkpoint = checkpoint;
+            // Каждый костёр один раз за забег полностью лечит.
+            if (this.rested.has(checkpoint)) continue;
+            this.rested.add(checkpoint);
+            if (player.hp < player.maxHp) {
+                player.hp = player.maxHp;
+                this.notice = { text: 'Костёр: здоровье восстановлено', color: '#ffd75e', ttl: NOTICE_TIME };
+            }
         }
 
         const fellOut = player.y > level.height;

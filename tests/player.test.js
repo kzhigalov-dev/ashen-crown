@@ -249,11 +249,11 @@ test('маг: шар тратит 12 маны, без маны атаки нет
     assert.equal(empty.attackCooldown, 0, 'перезарядка не началась');
 });
 
-test('маг: мана восстанавливается на 8 в секунду и не выше максимума', () => {
+test('маг: мана восстанавливается на 14 в секунду и не выше максимума', () => {
     const player = settledAs('mage');
     player.mana = 0;
     steps(player, flat, 60);
-    assert.ok(Math.abs(player.mana - 8) < 0.2, `мана ${player.mana}`);
+    assert.ok(Math.abs(player.mana - 14) < 0.2, `мана ${player.mana}`);
     player.mana = 99.99;
     steps(player, flat, 60);
     assert.equal(player.mana, 100);

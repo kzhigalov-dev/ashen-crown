@@ -85,13 +85,44 @@ test('Level: ошибка без точки появления или выход
     assert.throws(() => new Level({ id: 'x', name: 'X', segments: [['P..']] }), /exit/);
 });
 
-test('Уровень «Проклятый лес» собирается и содержит всё нужное', () => {
-    const level = new Level(LEVELS[0]);
-    assert.equal(level.id, 'forest');
-    assert.equal(level.rows, 17);
-    assert.equal(level.cols, 160);
-    assert.equal(level.coins.length, 20);
-    assert.equal(level.checkpoints.length, 2);
-    assert.equal(level.enemies.filter((e) => e.type === 'slime').length, 5);
-    assert.equal(level.enemies.filter((e) => e.type === 'wolf').length, 3);
+test('все три локации собираются и содержат всё нужное', () => {
+    const summary = LEVELS.map((def) => {
+        const level = new Level(def);
+        const count = (type) => level.enemies.filter((enemy) => enemy.type === type).length;
+        return {
+            id: level.id,
+            rows: level.rows,
+            cols: level.cols,
+            coins: level.coins.length,
+            checkpoints: level.checkpoints.length,
+            boss: level.enemies.filter((enemy) => ['treant', 'knight', 'demon'].includes(enemy.type)).map((enemy) => enemy.type),
+            foes: level.enemies.length - 1,
+            pillars: level.pillars.length,
+            imps: count('imp'),
+        };
+    });
+    assert.deepEqual(summary, [
+        { id: 'forest', rows: 17, cols: 180, coins: 20, checkpoints: 2, boss: ['treant'], foes: 8, pillars: 0, imps: 0 },
+        { id: 'castle', rows: 17, cols: 140, coins: 13, checkpoints: 2, boss: ['knight'], foes: 7, pillars: 0, imps: 0 },
+        { id: 'dungeon', rows: 17, cols: 160, coins: 12, checkpoints: 2, boss: ['demon'], foes: 6, pillars: 4, imps: 3 },
+    ]);
+});
+
+test('у каждой локации есть оформление и сюжетный текст', async () => {
+    const { STORY } = await import('../js/data/story.js');
+    for (const def of LEVELS) {
+        assert.ok(def.theme.sky && def.theme.far && def.theme.near, `${def.id}: цвета`);
+        assert.ok(['trees', 'columns'].includes(def.theme.backdrop), `${def.id}: фон`);
+        assert.ok(STORY[def.id].length > 50, `${def.id}: текст`);
+    }
+    assert.ok(STORY.victory.length > 50);
+});
+
+test('босс стоит в последнем сегменте, портал — за ним', () => {
+    for (const def of LEVELS) {
+        const level = new Level(def);
+        const boss = level.enemies.at(-1);
+        assert.ok(boss.x >= level.width - 20 * 16, `${def.id}: босс в арене`);
+        assert.ok(level.exit.x > boss.x, `${def.id}: портал за боссом`);
+    }
 });

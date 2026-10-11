@@ -40,6 +40,18 @@ export function drawHud(ctx, game, sprites) {
     ctx.fillStyle = '#ffe27a';
     ctx.fillText(String(game.gold), 103, 7);
 
+    // Полоса здоровья босса внизу экрана.
+    const boss = game.enemies.find((enemy) => enemy.def.boss && enemy.awake);
+    if (boss) {
+        bar(ctx, 140, 256, 200, 5, boss.hp / boss.maxHp, '#3a1420', '#b3312f');
+        ctx.textAlign = 'center';
+        ctx.fillStyle = INK;
+        ctx.fillText(boss.def.name, 241, 245);
+        ctx.fillStyle = '#e8dcc4';
+        ctx.fillText(boss.def.name, 240, 244);
+        ctx.textAlign = 'left';
+    }
+
     // Название подобранного предмета — по центру вверху, цветом редкости.
     if (game.notice) {
         ctx.textAlign = 'center';

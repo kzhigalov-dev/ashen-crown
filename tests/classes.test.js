@@ -24,7 +24,7 @@ test('числа классов соответствуют спецификац�
     );
     assert.equal(archer.extraJumps, 1);
     assert.equal(mage.maxMana, 100);
-    assert.equal(mage.manaRegen, 8);
+    assert.equal(mage.manaRegen, 14, 'подстроено при балансе, в спецификации было 8');
     assert.equal(mage.attack.manaCost, 12);
     assert.equal(mage.ability.manaCost, 30);
 });

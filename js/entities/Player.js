@@ -156,15 +156,15 @@ export class Player extends Entity {
         }
     }
 
-    // Выстрел: снаряд появляется перед героем на уровне пояса —
-    // так он не пролетает над низкими врагами.
+    // Выстрел: снаряд появляется у самого героя на уровне пояса —
+    // так он попадает и по врагу вплотную, и по низкому врагу.
     fire(move) {
         this.actions.push({
             type: 'projectile',
             kind: move.projectile,
             ...this.rollDamage(move.damage),
             dir: this.facing,
-            x: this.x + this.w / 2 + this.facing * 8,
+            x: this.x + this.w / 2 + this.facing * 2,
             y: this.y + 14,
         });
     }

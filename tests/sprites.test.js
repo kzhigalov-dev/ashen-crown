@@ -27,6 +27,11 @@ const SIZES = {
     wolf1: [20, 12],
     wolf2: [20, 12],
     lootBag: [8, 8],
+    fireball: [6, 6],
+    imp1: [12, 12],
+    imp2: [12, 12],
+    treant: [16, 22],
+    demon: [20, 20],
 };
 
 test('есть все спрайты', () => {

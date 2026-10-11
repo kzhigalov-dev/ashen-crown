@@ -53,7 +53,7 @@ export const ENEMIES = {
     knight: {
         id: 'knight', name: 'Чёрный рыцарь', behavior: 'knight', boss: true,
         w: 18, h: 42, maxHp: 380, damage: 18, speed: 30, gold: [60, 90],
-        attackRate: [2.0, 1.2], dashSpeed: 230, hazardDamage: 15,
+        attackRate: [2.0, 1.2], windup: 0.6, dashSpeed: 200, dashTime: 0.55, hazardDamage: 15,
         frames: ['heroRun1', 'heroRun2'], idle: 'heroIdle', recolor: DARK_STEEL, weapon: 'sword', scale: 2,
     },
     demon: {
