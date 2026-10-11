@@ -1,0 +1,125 @@
+:root {
+    --scale: 2;
+    --ink: #e8dcc4;
+    --muted: #b9ad98;
+    --ash: #0b0a10;
+    --panel: #2b2433;
+    --border: #6b5a4a;
+    --gold: #e8b923;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* Атрибут hidden должен побеждать display: flex у экранов. */
+[hidden] {
+    display: none !important;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: var(--ash);
+    color: var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* Размер и --scale выставляет Renderer.resize(); текст растёт вместе с полем. */
+#stage {
+    position: relative;
+    width: 480px;
+    height: 270px;
+    font-size: calc(6.5px * var(--scale));
+}
+
+#game {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #141b2b;
+    image-rendering: pixelated;
+}
+
+.screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9em;
+    padding: 2em;
+    text-align: center;
+    background: rgba(11, 10, 16, 0.86);
+}
+
+.screen h1,
+.screen h2 {
+    margin: 0;
+    font-size: 2.4em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold);
+    text-shadow: 0.08em 0.08em 0 #5a2a12;
+}
+
+.screen p {
+    max-width: 34em;
+    margin: 0;
+    line-height: 1.5;
+}
+
+button {
+    min-width: 14em;
+    padding: 0.5em 1.2em;
+    border: 0.15em solid var(--border);
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #3a3046;
+}
+
+button:focus-visible {
+    outline: 0.2em solid var(--gold);
+    outline-offset: 0.15em;
+}
+
+.hud-button {
+    position: absolute;
+    top: 0.6em;
+    right: 0.6em;
+    min-width: 0;
+    padding: 0.3em 0.7em;
+    font-size: 0.8em;
+    opacity: 0.85;
+}
+
+.keys {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.2em 1.2em;
+    margin: 0.6em 0 0;
+    font-size: 0.8em;
+    text-align: left;
+    color: var(--muted);
+}
+
+.keys dt {
+    color: var(--ink);
+}
+
+.keys dd {
+    margin: 0;
+}

@@ -19,6 +19,8 @@ export const JUMP_CUT = 0.45;
 
 // Правила мира
 export const HAZARD_DAMAGE = 20;
+// Шипы нарисованы в нижней половине тайла: верхние 8 px тайла безопасны.
+export const HAZARD_INSET = 8;
 export const INVULN_TIME = 0.8;
 export const COIN_VALUE = 5;
 export const CAMERA_LERP = 8;

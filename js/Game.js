@@ -3,7 +3,7 @@ import { Player } from './entities/Player.js';
 import { overlaps, touchesTile } from './Collision.js';
 import {
     STEP, MAX_FRAME, VIEW_W, VIEW_H,
-    HAZARD_DAMAGE, INVULN_TIME, COIN_VALUE, CAMERA_LERP,
+    HAZARD_DAMAGE, HAZARD_INSET, INVULN_TIME, COIN_VALUE, CAMERA_LERP,
 } from './data/constants.js';
 
 export class Game {
@@ -134,7 +134,7 @@ export class Game {
         }
 
         const fellOut = player.y > level.height;
-        if (fellOut || touchesTile(player, level, HAZARD)) {
+        if (fellOut || touchesTile(this.hazardBox(), level, HAZARD)) {
             player.takeDamage(HAZARD_DAMAGE);
             player.invuln = INVULN_TIME;
             if (!player.dead) player.placeAt(this.checkpoint);
@@ -144,6 +144,13 @@ export class Game {
 
         if (player.dead) this.setState('dead');
         else if (overlaps(player, level.exit)) this.setState('complete');
+    }
+
+    // Область героя, которой он задевает ловушки: чуть уже тела и без нижних
+    // HAZARD_INSET пикселей — урон начинается там, где шипы нарисованы.
+    hazardBox() {
+        const { x, y, w, h } = this.player;
+        return { x: x + 1, y, w: w - 2, h: h - HAZARD_INSET };
     }
 
     cameraTarget() {

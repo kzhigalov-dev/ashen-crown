@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пепельная корона</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <main id="stage">
+        <canvas id="game" aria-label="Игровое поле"></canvas>
+        <button id="btn-pause" class="hud-button" data-action="pause" hidden>Пауза (P)</button>
+
+        <section id="screen-menu" class="screen">
+            <h1>Пепельная корона</h1>
+            <p>Король пал, корона обратилась в пепел. Путь к трону лежит через проклятый лес.</p>
+            <button data-action="start">Начать игру</button>
+            <dl class="keys">
+                <dt>A / D, ← / →</dt><dd>движение</dd>
+                <dt>Пробел, W, ↑</dt><dd>прыжок</dd>
+                <dt>P, Esc</dt><dd>пауза</dd>
+            </dl>
+        </section>
+
+        <section id="screen-paused" class="screen" hidden>
+            <h2>Пауза</h2>
+            <button data-action="resume">Продолжить</button>
+            <button data-action="restart">Рестарт уровня</button>
+            <button data-action="menu">В меню</button>
+            <dl class="keys">
+                <dt>A / D, ← / →</dt><dd>движение</dd>
+                <dt>Пробел, W, ↑</dt><dd>прыжок</dd>
+                <dt>P, Esc</dt><dd>пауза</dd>
+            </dl>
+        </section>
+
+        <section id="screen-complete" class="screen" hidden>
+            <h2>Лес пройден</h2>
+            <p>Собрано золота: <strong data-gold>0</strong></p>
+            <button data-action="restart">Сыграть ещё раз</button>
+            <button data-action="menu">В меню</button>
+        </section>
+
+        <section id="screen-dead" class="screen" hidden>
+            <h2>Охотник пал</h2>
+            <p>Золото этого забега потеряно.</p>
+            <button data-action="restart">Попробовать снова</button>
+            <button data-action="menu">В меню</button>
+        </section>
+    </main>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

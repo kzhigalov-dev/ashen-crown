@@ -65,12 +65,21 @@ test('шипы: −20 здоровья и возврат к костру', () =>
     game.update(STEP);
     assert.equal(game.checkpoint, game.level.checkpoints[0]);
     game.player.x = 83;
-    game.player.y = 30;
+    game.player.y = 36;
     game.update(STEP);
     assert.equal(game.player.hp, 80);
     assert.equal(game.player.x, 67);
     assert.equal(game.player.y, 26);
     assert.ok(game.player.invuln > 0);
+});
+
+test('шипы не ранят, пока ноги выше нарисованных зубьев', () => {
+    const { game } = setup();
+    // Тайл шипов занимает y 48..64, зубья нарисованы в нижней половине (56..64).
+    game.player.x = 83;
+    game.player.y = 30;
+    game.update(STEP);
+    assert.equal(game.player.hp, 100);
 });
 
 test('падение в яму без костра возвращает на старт', () => {
