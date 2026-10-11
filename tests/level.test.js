@@ -55,6 +55,15 @@ test('Level: враги на карте', () => {
     assert.equal(level.tileAt(2, 0), EMPTY);
 });
 
+test('Level: новые враги, боссы и огненные столбы', () => {
+    const level = new Level({ id: 'e', name: 'E', segments: [['PzaiTKDfE', '#########']] });
+    assert.deepEqual(
+        level.enemies.map((enemy) => enemy.type),
+        ['skeleton', 'skeletonArcher', 'imp', 'treant', 'knight', 'demon']
+    );
+    assert.deepEqual(level.pillars, [{ x: 112, y: 0, w: 16, h: 16 }]);
+});
+
 test('joinSegments: склеивает сегменты по горизонтали', () => {
     assert.deepEqual(joinSegments([['ab', 'cd'], ['e', 'f']]), ['abe', 'cdf']);
 });

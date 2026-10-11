@@ -6,8 +6,11 @@ export const ONEWAY = 2;
 export const HAZARD = 3;
 
 const TILE_CHARS = { '.': EMPTY, '#': SOLID, '=': ONEWAY, '^': HAZARD, '~': HAZARD };
-// Символы врагов на карте. Параметры врагов — в data/enemies.js.
-const ENEMY_CHARS = { s: 'slime', w: 'wolf' };
+// Символы врагов и боссов на карте. Параметры — в data/enemies.js.
+const ENEMY_CHARS = {
+    s: 'slime', w: 'wolf', z: 'skeleton', a: 'skeletonArcher', i: 'imp',
+    T: 'treant', K: 'knight', D: 'demon',
+};
 
 // Склеивает сегменты уровня слева направо в одну карту.
 export function joinSegments(segments) {
@@ -40,6 +43,7 @@ export class Level {
         this.checkpoints = [];
         this.coins = [];
         this.enemies = [];
+        this.pillars = [];   // точки огненных столбов (символ f)
 
         this.chars.forEach((line, row) => {
             const tileRow = [];
@@ -55,6 +59,7 @@ export class Level {
                 else if (char === 'E') this.exit = point;
                 else if (char === 'C') this.checkpoints.push(point);
                 else if (char === 'o') this.coins.push(point);
+                else if (char === 'f') this.pillars.push(point);
                 else if (char in ENEMY_CHARS) this.enemies.push({ type: ENEMY_CHARS[char], ...point });
                 else throw new Error(`Level "${def.id}": unknown char "${char}" at ${col},${row}`);
             }

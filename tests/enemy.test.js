@@ -124,3 +124,99 @@ test('отбрасывание не сталкивает врага с плат�
     assert.ok(slime.x + slime.w <= 113, `правый край ${slime.x + slime.w}`);
     assert.equal(slime.y, 38);
 });
+
+// ---------- Скелеты и бес ----------
+
+// Ровная площадка шириной 12 тайлов.
+const yard = new Level({
+    id: 'y',
+    name: 'Y',
+    segments: [[
+        '............',
+        '............',
+        'P..........E',
+        '############',
+    ]],
+});
+
+function runIn(level, enemy, seconds, player, each = () => {}) {
+    for (let i = 0; i < Math.round(seconds * 60); i++) {
+        enemy.update(STEP, level, player);
+        each(enemy.takeActions());
+    }
+}
+
+test('скелет-мечник: замах 0,4 с, затем один удар в сторону героя', () => {
+    const skeleton = new Enemy('skeleton', 80, 32);
+    const player = hero({ x: 66 });   // вплотную слева
+    const strikes = [];
+    runIn(yard, skeleton, 0.3, player, (actions) => strikes.push(...actions));
+    assert.equal(skeleton.phase, 'windup');
+    assert.equal(strikes.length, 0, 'во время замаха урона нет');
+    runIn(yard, skeleton, 0.3, player, (actions) => strikes.push(...actions));
+    assert.equal(strikes.length, 1);
+    assert.equal(strikes[0].type, 'strike');
+    assert.equal(strikes[0].damage, 18);
+    const center = skeleton.x + skeleton.w / 2;
+    assert.ok(strikes[0].box.x + strikes[0].box.w <= center + 0.001, 'бьёт влево, где герой');
+});
+
+test('скелет-мечник: попадание сбивает замах', () => {
+    const skeleton = new Enemy('skeleton', 80, 32);
+    const player = hero({ x: 66 });
+    const strikes = [];
+    runIn(yard, skeleton, 0.2, player, (actions) => strikes.push(...actions));
+    assert.equal(skeleton.phase, 'windup');
+    skeleton.hit(5, 'a', 1);
+    runIn(yard, skeleton, 0.25, FAR, (actions) => strikes.push(...actions));
+    assert.equal(strikes.length, 0);
+    assert.equal(skeleton.phase, 'walk');
+});
+
+test('скелет-мечник: без героя рядом патрулирует', () => {
+    const skeleton = new Enemy('skeleton', 80, 32);
+    const startX = skeleton.x;
+    runIn(yard, skeleton, 1, FAR);
+    assert.ok(Math.abs(skeleton.x - startX) > 20);
+});
+
+test('скелет-лучник: стоит и стреляет в сторону героя раз в 2 с', () => {
+    const archer = new Enemy('skeletonArcher', 144, 32);
+    const player = hero({ x: 20 });
+    const shots = [];
+    runIn(yard, archer, 4.5, player, (actions) => shots.push(...actions));
+    assert.equal(archer.x, 147, 'не двигается');
+    assert.equal(shots.length, 2);
+    assert.deepEqual(
+        { type: shots[0].type, kind: shots[0].kind, dir: shots[0].dir, damage: shots[0].damage },
+        { type: 'shot', kind: 'enemyArrow', dir: -1, damage: 10 }
+    );
+});
+
+test('скелет-лучник: не стреляет, пока не видит героя', () => {
+    const archer = new Enemy('skeletonArcher', 144, 32);
+    const shots = [];
+    runIn(yard, archer, 5, FAR, (actions) => shots.push(...actions));
+    assert.equal(shots.length, 0);
+});
+
+test('бес: летает возле точки появления и не падает', () => {
+    const imp = new Enemy('imp', 80, 0);
+    let minX = imp.x, maxX = imp.x, minY = imp.y, maxY = imp.y;
+    runIn(yard, imp, 6, FAR, () => {
+        minX = Math.min(minX, imp.x); maxX = Math.max(maxX, imp.x);
+        minY = Math.min(minY, imp.y); maxY = Math.max(maxY, imp.y);
+    });
+    assert.ok(maxX - minX > 60 && maxX - minX <= 80.001, `размах по X ${maxX - minX}`);
+    assert.ok(maxY - minY > 12 && maxY - minY <= 16.001, `размах по Y ${maxY - minY}`);
+});
+
+test('бес: стреляет огнём точно в героя', () => {
+    const imp = new Enemy('imp', 80, 0);
+    const player = hero({ x: 60, y: 26 });
+    const shots = [];
+    runIn(yard, imp, 3, player, (actions) => shots.push(...actions));
+    assert.equal(shots.length, 1);
+    assert.equal(shots[0].kind, 'fireball');
+    assert.deepEqual(shots[0].target, { x: 65, y: 37 });
+});

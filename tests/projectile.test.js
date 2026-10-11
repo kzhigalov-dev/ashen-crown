@@ -71,3 +71,20 @@ test('пробивающая стрела помечена и у снарядо�
     assert.equal(b.pierce, false);
     assert.notEqual(a.id, b.id);
 });
+
+test('прицельный снаряд летит в цель со своей скоростью', () => {
+    const fireball = new Projectile('fireball', 50, 10, 1, 12, { x: 20, y: 50 });
+    assert.ok(Math.abs(Math.hypot(fireball.vx, fireball.vy) - 115) < 1e-9);
+    assert.ok(fireball.vx < 0 && fireball.vy > 0, 'влево и вниз');
+    assert.equal(fireball.dir, -1);
+    // Отношение скоростей равно отношению смещений: 30 влево, 40 вниз.
+    assert.ok(Math.abs(fireball.vx / fireball.vy - (-30 / 40)) < 1e-9);
+});
+
+test('вражеская стрела летит по прямой', () => {
+    const arrow = new Projectile('enemyArrow', 100, 40, -1, 10);
+    const startY = arrow.y;
+    fly(arrow, 20);
+    assert.equal(arrow.y, startY);
+    assert.ok(arrow.x < 60);
+});

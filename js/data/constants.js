@@ -28,3 +28,8 @@ export const COIN_VALUE = 5;
 export const CAMERA_LERP = 8;
 // Сколько секунд на экране висит название подобранного предмета
 export const NOTICE_TIME = 2;
+// Сколько слизней босс может держать призванными одновременно
+export const MAX_SUMMONED = 2;
+// Огненные столбы подземелья: период срабатывания и урон
+export const PILLAR_PERIOD = 2.6;
+export const PILLAR_DAMAGE = 15;

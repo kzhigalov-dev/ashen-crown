@@ -1,21 +1,25 @@
 import { Level, HAZARD } from './Level.js';
 import { Player } from './entities/Player.js';
 import { Enemy } from './entities/Enemy.js';
+import { Boss } from './entities/Boss.js';
 import { Projectile } from './entities/Projectile.js';
 import { LootDrop } from './entities/LootDrop.js';
 import { overlaps, touchesTile } from './Collision.js';
 import { CLASSES } from './data/classes.js';
+import { ENEMIES } from './data/enemies.js';
 import { rollDrop, dismantleValue, rarityOf } from './systems/Loot.js';
 import { Save, defaultProfile } from './systems/Save.js';
 import {
     STEP, MAX_FRAME, VIEW_W, VIEW_H,
     HAZARD_DAMAGE, HAZARD_INSET, INVULN_TIME, COIN_VALUE, CAMERA_LERP, NOTICE_TIME,
+    TILE, MAX_SUMMONED, PILLAR_PERIOD, PILLAR_DAMAGE,
 } from './data/constants.js';
 
 // Состояния игры:
 //   menu → classSelect → map ⇄ equipment
-//   map → playing ⇄ paused
+//   map → story → playing ⇄ paused      (story — только пока локация не пройдена)
 //   playing → complete | dead → map
+//   playing → victory → map             (первая победа над последним боссом)
 export class Game {
     // levels — описания локаций по порядку;
     // rng — источник случайных чисел от 0 до 1 (в тестах подставляется свой);
@@ -39,6 +43,9 @@ export class Game {
         this.enemies = [];
         this.projectiles = [];
         this.drops = [];
+        this.enemyShots = [];       // снаряды врагов
+        this.hazards = [];          // ловушки с предупреждением: корни, волны, столбы
+        this.pillars = [];          // огненные столбы уровня, срабатывают по таймеру
         this.effects = [];          // короткие вспышки для отрисовки (взрыв мага)
         this.notice = null;         // всплывающая надпись: { text, color, ttl }
         this.checkpoint = null;
@@ -115,11 +122,33 @@ export class Game {
         if (this.state === 'map') this.setState('equipment');
     }
 
-    // Запускает локацию, если она открыта.
+    isOpen(index) {
+        return Boolean(this.profile) && index >= 0 && index < this.levels.length && index < this.profile.unlocked;
+    }
+
+    // Локация ещё не пройдена ни разу.
+    isNew(index) {
+        return index === this.profile.unlocked - 1;
+    }
+
+    // Вход в локацию с карты: перед непройденной показывается сюжетный текст.
+    enterLevel(index) {
+        if (!this.isOpen(index)) return;
+        this.levelIndex = index;
+        if (this.isNew(index)) this.setState('story');
+        else this.restart();
+    }
+
+    // Запускает локацию сразу, без сюжетного текста.
     playLevel(index) {
-        if (!this.profile || index < 0 || index >= this.profile.unlocked) return;
+        if (!this.isOpen(index)) return;
         this.levelIndex = index;
         this.restart();
+    }
+
+    // Кнопка «В путь» на сюжетном экране.
+    beginLevel() {
+        if (this.state === 'story') this.restart();
     }
 
     equipItem(index) {
@@ -154,9 +183,17 @@ export class Game {
         this.player.placeAt(this.level.spawn);
         this.checkpoint = this.level.spawn;
         this.coins = this.level.coins.map((coin) => ({ ...coin, taken: false }));
-        this.enemies = this.level.enemies.map((spawn) => new Enemy(spawn.type, spawn.x, spawn.y));
+        this.enemies = this.level.enemies.map((spawn) => this.createEnemy(spawn.type, spawn.x, spawn.y));
         this.projectiles = [];
         this.drops = [];
+        this.enemyShots = [];
+        this.hazards = [];
+        // Столбы срабатывают не одновременно: у соседних разная начальная задержка.
+        this.pillars = this.level.pillars.map((point, index) => ({
+            x: point.x + TILE / 2,
+            bottom: point.y + TILE,
+            timer: 1 + (index % 3) * 0.7,
+        }));
         this.effects = [];
         this.notice = null;
         this.gold = 0;
@@ -235,6 +272,9 @@ export class Game {
         this.applyActions(player.takeActions());
         this.updateProjectiles(dt);
         this.updateEnemies(dt);
+        this.updatePillars(dt);
+        this.updateHazards(dt);
+        this.updateEnemyShots(dt);
         this.updateDrops(dt);
         for (const effect of this.effects) effect.ttl -= dt;
         this.effects = this.effects.filter((effect) => effect.ttl > 0);
@@ -260,17 +300,29 @@ export class Game {
         this.camera.x += (this.cameraTarget() - this.camera.x) * Math.min(1, CAMERA_LERP * dt);
 
         if (player.dead) this.loseLevel();
-        else if (overlaps(player, level.exit)) this.finishLevel();
+        else if (!this.bossAlive && overlaps(player, level.exit)) this.finishLevel();
+    }
+
+    // Пока жив босс, портал закрыт.
+    get bossAlive() {
+        return this.enemies.some((enemy) => enemy.def.boss && !enemy.dead);
+    }
+
+    createEnemy(type, x, y) {
+        return ENEMIES[type].boss ? new Boss(type, x, y) : new Enemy(type, x, y);
     }
 
     // Уровень пройден: золото забега уходит в общее, открывается следующая локация.
+    // unlocked больше числа локаций означает, что пройдена и последняя.
     finishLevel() {
         const { profile } = this;
+        const firstClear = this.isNew(this.levelIndex);
+        const last = this.levelIndex === this.levels.length - 1;
         profile.gold += this.gold;
         profile.bestRun = Math.max(profile.bestRun, this.gold);
-        profile.unlocked = Math.min(this.levels.length, Math.max(profile.unlocked, this.levelIndex + 2));
+        profile.unlocked = Math.max(profile.unlocked, this.levelIndex + 2);
         this.persist();
-        this.setState('complete');
+        this.setState(firstClear && last ? 'victory' : 'complete');
     }
 
     // Герой погиб: золото забега теряется, найденные предметы остаются.
@@ -318,16 +370,81 @@ export class Game {
 
     updateEnemies(dt) {
         const { player, level } = this;
+        const summoned = [];
         for (const enemy of this.enemies) {
             if (enemy.dead) {
                 this.dropLoot(enemy);
                 continue;
             }
             enemy.update(dt, level, player);
+            for (const action of enemy.takeActions()) this.applyEnemyAction(action, summoned);
             // Оглушённый враг не ранит — у ближнего боя есть окно для удара.
             if (enemy.stun <= 0 && overlaps(player, enemy)) player.hurt(enemy.damage);
         }
-        this.enemies = this.enemies.filter((enemy) => !enemy.dead && enemy.y <= level.height);
+        this.enemies = this.enemies
+            .filter((enemy) => !enemy.dead && enemy.y <= level.height)
+            .concat(summoned);
+    }
+
+    // Применяет действие врага: удар, выстрел, ловушку или призыв.
+    applyEnemyAction(action, summoned) {
+        if (action.type === 'strike') {
+            if (overlaps(action.box, this.player)) this.player.hurt(action.damage);
+            this.effects.push({ kind: 'strike', ...action.box, ttl: 0.12, life: 0.12 });
+        } else if (action.type === 'shot') {
+            this.enemyShots.push(new Projectile(
+                action.kind, action.x, action.y, action.dir, action.damage, action.target ?? null
+            ));
+        } else if (action.type === 'hazard') {
+            this.addHazard(action);
+        } else if (action.type === 'summon') {
+            // Призванных одновременно не больше MAX_SUMMONED.
+            const alive = this.enemies.filter((enemy) => enemy.summoned && !enemy.dead).length;
+            if (alive + summoned.length >= MAX_SUMMONED) return;
+            const enemy = this.createEnemy(action.enemy, action.x, action.y);
+            enemy.summoned = true;
+            summoned.push(enemy);
+        }
+    }
+
+    // Ловушка: delay секунд видна метка, затем life секунд ранит.
+    addHazard({ kind, x, w, h, bottom, delay, life, damage }) {
+        this.hazards.push({ kind, x, y: bottom - h, w, h, delay, life, total: life, damage });
+    }
+
+    updateHazards(dt) {
+        for (const hazard of this.hazards) {
+            if (hazard.delay > 0) {
+                hazard.delay -= dt;
+                continue;
+            }
+            hazard.life -= dt;
+            if (overlaps(hazard, this.player)) this.player.hurt(hazard.damage);
+        }
+        this.hazards = this.hazards.filter((hazard) => hazard.life > 0);
+    }
+
+    // Огненные столбы уровня срабатывают по таймеру.
+    updatePillars(dt) {
+        for (const pillar of this.pillars) {
+            pillar.timer -= dt;
+            if (pillar.timer > 0) continue;
+            pillar.timer = PILLAR_PERIOD;
+            this.addHazard({
+                kind: 'pillar', x: pillar.x - 6, w: 12, h: 40, bottom: pillar.bottom,
+                delay: 0.5, life: 0.7, damage: PILLAR_DAMAGE,
+            });
+        }
+    }
+
+    updateEnemyShots(dt) {
+        for (const shot of this.enemyShots) {
+            shot.update(dt, this.level);
+            if (shot.dead || !overlaps(shot, this.player)) continue;
+            this.player.hurt(shot.damage);
+            shot.dead = true;
+        }
+        this.enemyShots = this.enemyShots.filter((shot) => !shot.dead);
     }
 
     // Из убитого врага всегда выпадает золото и иногда — предмет.
