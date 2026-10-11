@@ -23,8 +23,12 @@ import {
 export class Game {
     // levels — описания локаций по порядку;
     // rng — источник случайных чисел от 0 до 1 (в тестах подставляется свой);
-    // save — хранилище прогресса (по умолчанию ничего не сохраняет).
-    constructor({ levels, input, renderer = null, onStateChange = () => {}, rng = Math.random, save = null }) {
+    // save — хранилище прогресса (по умолчанию ничего не сохраняет);
+    // audio — звуковая система с методами play(name) и setVolume(v), может отсутствовать.
+    constructor({
+        levels, input, renderer = null, onStateChange = () => {},
+        rng = Math.random, save = null, audio = null,
+    }) {
         this.levels = levels;
         this.levelIndex = 0;
         this.input = input;
@@ -32,6 +36,9 @@ export class Game {
         this.onStateChange = onStateChange;
         this.rng = rng;
         this.save = save ?? new Save(null);
+        this.audio = audio;
+        this.volume = 0.5;
+        this.events = [];           // что произошло за шаг: по ним играются звуки
 
         this.state = 'menu';
         this.profile = null;        // прогресс: класс, снаряжение, золото
@@ -83,6 +90,7 @@ export class Game {
     newGame(classId) {
         this.classId = classId;
         this.profile = defaultProfile(classId);
+        this.profile.volume = this.volume;
         this.persist();
         this.openMap();
     }
@@ -93,8 +101,29 @@ export class Game {
         if (!profile) return false;
         this.profile = profile;
         this.classId = profile.classId;
+        this.setVolume(profile.volume);
         this.openMap();
         return true;
+    }
+
+    // Громкость от 0 до 1; хранится в профиле.
+    setVolume(volume) {
+        this.volume = Math.max(0, Math.min(1, volume));
+        this.audio?.setVolume(this.volume);
+        if (this.profile && this.profile.volume !== this.volume) {
+            this.profile.volume = this.volume;
+            this.persist();
+        }
+    }
+
+    emit(name) {
+        this.events.push(name);
+    }
+
+    // Отдаёт события слушателю (звуку) и очищает список.
+    flushEvents() {
+        for (const name of this.events) this.audio?.play(name);
+        this.events = [];
     }
 
     persist() {
@@ -263,12 +292,14 @@ export class Game {
             this.input.endStep();
         }
 
+        this.flushEvents();
         if (this.renderer && this.level) this.renderer.draw(this);
     }
 
     update(dt) {
         const { player, level } = this;
         player.update(dt, this.input, level);
+        this.events.push(...player.takeEvents());
         this.time += dt;
 
         this.applyActions(player.takeActions());
@@ -278,14 +309,15 @@ export class Game {
         this.updateHazards(dt);
         this.updateEnemyShots(dt);
         this.updateDrops(dt);
-        for (const effect of this.effects) effect.ttl -= dt;
-        this.effects = this.effects.filter((effect) => effect.ttl > 0);
+        this.updateEffects(dt);
         if (this.notice && (this.notice.ttl -= dt) <= 0) this.notice = null;
 
         for (const coin of this.coins) {
             if (coin.taken || !overlaps(player, coin)) continue;
             coin.taken = true;
             this.gold += COIN_VALUE;
+            this.emit('coin');
+            this.burst(coin.x + 8, coin.y + 8, '#ffe27a', 4);
         }
 
         for (const checkpoint of level.checkpoints) {
@@ -296,6 +328,7 @@ export class Game {
             this.rested.add(checkpoint);
             if (player.hp < player.maxHp) {
                 player.hp = player.maxHp;
+                this.emit('heal');
                 this.notice = { text: 'Костёр: здоровье восстановлено', color: '#ffd75e', ttl: NOTICE_TIME };
             }
         }
@@ -304,6 +337,7 @@ export class Game {
         if (fellOut || touchesTile(this.hazardBox(), level, HAZARD)) {
             player.takeDamage(HAZARD_DAMAGE);
             player.invuln = INVULN_TIME;
+            this.emit('hurt');
             if (!player.dead) player.placeAt(this.checkpoint);
         }
 
@@ -332,12 +366,14 @@ export class Game {
         profile.bestRun = Math.max(profile.bestRun, this.gold);
         profile.unlocked = Math.max(profile.unlocked, this.levelIndex + 2);
         this.persist();
+        this.emit('complete');
         this.setState(firstClear && last ? 'victory' : 'complete');
     }
 
     // Герой погиб: золото забега теряется, найденные предметы остаются.
     loseLevel() {
         this.persist();
+        this.emit('defeat');
         this.setState('dead');
     }
 
@@ -345,9 +381,9 @@ export class Game {
     applyActions(actions) {
         for (const action of actions) {
             if (action.type === 'projectile') {
-                this.projectiles.push(
-                    new Projectile(action.kind, action.x, action.y, action.dir, action.damage)
-                );
+                const projectile = new Projectile(action.kind, action.x, action.y, action.dir, action.damage);
+                projectile.crit = action.crit;
+                this.projectiles.push(projectile);
                 continue;
             }
             if (action.type === 'blast') {
@@ -357,7 +393,7 @@ export class Game {
                 if (!overlaps(action.box, enemy)) continue;
                 // Взрыв отбрасывает от центра, удар — в сторону удара.
                 const dir = action.dir || (enemy.x + enemy.w / 2 < action.x ? -1 : 1);
-                enemy.hit(action.damage, action.id, dir);
+                this.hitEnemy(enemy, action.damage, action.id, dir, action.crit);
             }
         }
     }
@@ -368,7 +404,7 @@ export class Game {
             if (projectile.dead) continue;
             for (const enemy of this.enemies) {
                 if (enemy.dead || !overlaps(projectile, enemy)) continue;
-                const hit = enemy.hit(projectile.damage, projectile.id, projectile.dir);
+                const hit = this.hitEnemy(enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit);
                 if (hit && !projectile.pierce) {
                     projectile.dead = true;
                     break;
@@ -389,7 +425,7 @@ export class Game {
             enemy.update(dt, level, player);
             for (const action of enemy.takeActions()) this.applyEnemyAction(action, summoned);
             // Оглушённый враг не ранит — у ближнего боя есть окно для удара.
-            if (enemy.stun <= 0 && overlaps(player, enemy)) player.hurt(enemy.damage);
+            if (enemy.stun <= 0 && overlaps(player, enemy)) this.hurtPlayer(enemy.damage);
         }
         this.enemies = this.enemies
             .filter((enemy) => !enemy.dead && enemy.y <= level.height)
@@ -399,7 +435,7 @@ export class Game {
     // Применяет действие врага: удар, выстрел, ловушку или призыв.
     applyEnemyAction(action, summoned) {
         if (action.type === 'strike') {
-            if (overlaps(action.box, this.player)) this.player.hurt(action.damage);
+            if (overlaps(action.box, this.player)) this.hurtPlayer(action.damage);
             this.effects.push({ kind: 'strike', ...action.box, ttl: 0.12, life: 0.12 });
         } else if (action.type === 'shot') {
             this.enemyShots.push(new Projectile(
@@ -429,7 +465,7 @@ export class Game {
                 continue;
             }
             hazard.life -= dt;
-            if (overlaps(hazard, this.player)) this.player.hurt(hazard.damage);
+            if (overlaps(hazard, this.player)) this.hurtPlayer(hazard.damage);
         }
         this.hazards = this.hazards.filter((hazard) => hazard.life > 0);
     }
@@ -451,7 +487,7 @@ export class Game {
         for (const shot of this.enemyShots) {
             shot.update(dt, this.level);
             if (shot.dead || !overlaps(shot, this.player)) continue;
-            this.player.hurt(shot.damage);
+            this.hurtPlayer(shot.damage);
             shot.dead = true;
         }
         this.enemyShots = this.enemyShots.filter((shot) => !shot.dead);
@@ -461,6 +497,8 @@ export class Game {
     dropLoot(enemy) {
         const x = enemy.x + enemy.w / 2;
         const y = enemy.y + enemy.h / 2;
+        this.emit(enemy.def.boss ? 'bossDown' : 'kill');
+        this.burst(x, y, enemy.def.color ?? '#ffffff', enemy.def.boss ? 24 : 8);
         const [min, max] = enemy.def.gold;
         const value = min + Math.floor(this.rng() * (max - min + 1));
         const dir = this.rng() < 0.5 ? -1 : 1;
@@ -480,8 +518,14 @@ export class Game {
             drop.update(dt, this.level);
             if (!drop.ready || drop.dead || !overlaps(this.player, drop)) continue;
             drop.dead = true;
-            if (drop.kind === 'gold') this.gold += drop.value;
-            else this.collectItem(drop.item);
+            this.burst(drop.x + 4, drop.y + 4, drop.kind === 'gold' ? '#ffe27a' : rarityOf(drop.item).color, 4);
+            if (drop.kind === 'gold') {
+                this.gold += drop.value;
+                this.emit('coin');
+            } else {
+                this.collectItem(drop.item);
+                this.emit('item');
+            }
         }
         this.drops = this.drops.filter((drop) => !drop.dead);
     }
@@ -495,6 +539,45 @@ export class Game {
         const gold = dismantleValue(item);
         this.gold += gold;
         this.notice = { text: `Сумка полна: +${gold} золота`, color: '#b9ad98', ttl: NOTICE_TIME };
+    }
+
+    // Попадание по врагу: звук и всплывающее число урона.
+    hitEnemy(enemy, damage, id, dir, crit = false) {
+        if (!enemy.hit(damage, id, dir)) return false;
+        this.emit('hit');
+        this.effects.push({
+            kind: 'number', text: String(Math.round(damage)), crit,
+            x: enemy.x + enemy.w / 2, y: enemy.y - 2, ttl: 0.6, life: 0.6,
+        });
+        return true;
+    }
+
+    hurtPlayer(amount) {
+        if (this.player.hurt(amount)) this.emit('hurt');
+    }
+
+    // Россыпь частиц. Направления заданы по кругу, без случайности —
+    // чтобы эффекты не влияли на бросок добычи.
+    burst(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2 + 0.4;
+            this.effects.push({
+                kind: 'particle', color, x, y,
+                vx: Math.cos(angle) * 55, vy: Math.sin(angle) * 55 - 50,
+                ttl: 0.45, life: 0.45,
+            });
+        }
+    }
+
+    updateEffects(dt) {
+        for (const effect of this.effects) {
+            effect.ttl -= dt;
+            if (effect.kind !== 'particle') continue;
+            effect.x += effect.vx * dt;
+            effect.y += effect.vy * dt;
+            effect.vy += 400 * dt;
+        }
+        this.effects = this.effects.filter((effect) => effect.ttl > 0);
     }
 
     // Область героя, которой он задевает ловушки: чуть уже тела и без нижних

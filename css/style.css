@@ -124,6 +124,19 @@ button:focus-visible {
     margin: 0;
 }
 
+.volume {
+    display: flex;
+    align-items: center;
+    gap: 0.8em;
+    font-size: 0.85em;
+    color: var(--muted);
+}
+
+.volume input {
+    width: 10em;
+    accent-color: var(--gold);
+}
+
 /* Экран выбора класса */
 .class-list {
     display: grid;

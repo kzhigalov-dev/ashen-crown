@@ -328,10 +328,10 @@ test('взрыв мага бьёт врагов вокруг и оставляе
     target.dispatch('keydown', { code: 'KeyK' });
     run(game, input, 1);
     assert.equal(game.enemies.length, 0, 'оба слизня (30 здоровья) убиты взрывом на 30');
-    assert.equal(game.effects.length, 1);
-    assert.equal(game.effects[0].kind, 'blast');
+    const blasts = () => game.effects.filter((effect) => effect.kind === 'blast');
+    assert.equal(blasts().length, 1);
     run(game, input, 20);
-    assert.equal(game.effects.length, 0);
+    assert.equal(blasts().length, 0);
     assert.equal(game.drops.length, 2);
 });
 
@@ -709,4 +709,97 @@ test('победа — только за первое прохождение п�
     assert.equal(clear(0), 'complete');
     assert.equal(game.isOpen(1), true, 'после победы всё открыто');
     assert.equal(game.isOpen(2), false, 'третьей локации нет');
+});
+
+// ---------- События, эффекты, громкость ----------
+
+function fakeAudio() {
+    return { played: [], volume: null, play(name) { this.played.push(name); }, setVolume(v) { this.volume = v; } };
+}
+
+test('события шага: прыжок, удар, попадание', () => {
+    const { game, input, target } = arena();
+    run(game, input, 1);   // герой встаёт на землю
+    target.dispatch('keydown', { code: 'Space' });
+    run(game, input, 1);
+    assert.deepEqual(game.events, ['jump']);
+    game.events = [];
+
+    game.player.x = 45;
+    target.dispatch('keydown', { code: 'KeyJ' });
+    run(game, input, 2);
+    assert.deepEqual(game.events, ['attack', 'hit']);
+});
+
+test('попадание оставляет всплывающее число урона, крит помечен', () => {
+    const { game, input, target } = arena('swordsman', () => 0.5);
+    game.player.bonus.crit = 100;
+    game.player.x = 45;
+    target.dispatch('keydown', { code: 'KeyJ' });
+    run(game, input, 2);
+    const number = game.effects.find((effect) => effect.kind === 'number');
+    assert.equal(number.text, '28');
+    assert.equal(number.crit, true);
+});
+
+test('гибель врага: звук и частицы; эффекты не тратят случайность', () => {
+    let calls = 0;
+    const { game, input } = arena('swordsman', () => { calls++; return 0.5; });
+    game.enemies[0].hit(999, 'test', 1);
+    run(game, input, 1);
+    assert.ok(game.events.includes('kill'));
+    assert.equal(game.effects.filter((effect) => effect.kind === 'particle').length, 8);
+    assert.equal(calls, 3, 'только золото, сторона и шанс предмета');
+    run(game, input, 40);
+    assert.equal(game.effects.length, 0, 'частицы исчезают');
+});
+
+test('урон герою, поражение и прохождение дают события', () => {
+    const { game, input } = arena();
+    game.player.x = 66;
+    run(game, input, 1);
+    assert.ok(game.events.includes('hurt'));
+
+    game.events = [];
+    game.player.hp = 20;
+    game.player.y = game.level.height + 5;
+    game.update(STEP);
+    assert.deepEqual(game.events, ['hurt', 'defeat']);
+
+    const second = arena();
+    second.game.player.invuln = 99;
+    second.game.player.x = second.game.level.exit.x + 3;
+    second.game.update(STEP);
+    assert.ok(second.game.events.includes('complete'));
+});
+
+test('tick передаёт события звуку и очищает список', () => {
+    const audio = fakeAudio();
+    const { game, target } = arena('swordsman', () => 0.5, { audio });
+    game.tick(0);
+    game.tick(20);         // герой встаёт на землю
+    target.dispatch('keydown', { code: 'Space' });
+    game.tick(40);
+    assert.deepEqual(audio.played, ['jump']);
+    assert.deepEqual(game.events, []);
+});
+
+test('громкость: ограничена, уходит в звук и сохраняется в профиле', () => {
+    const audio = fakeAudio();
+    const storage = memoryStorage();
+    const save = new Save(storage);
+    const game = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()), save, audio });
+    game.setVolume(0.2);
+    assert.equal(audio.volume, 0.2);
+    game.newGame('mage');
+    assert.equal(save.load().volume, 0.2, 'новая игра берёт текущую громкость');
+    game.setVolume(5);
+    assert.equal(game.volume, 1);
+    assert.equal(save.load().volume, 1);
+
+    const audio2 = fakeAudio();
+    const again = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()), save: new Save(storage), audio: audio2 });
+    again.continueGame();
+    assert.equal(again.volume, 1);
+    assert.equal(audio2.volume, 1, 'при загрузке громкость применяется');
 });

@@ -3,6 +3,7 @@ import { InputHandler } from './InputHandler.js';
 import { Renderer } from './Renderer.js';
 import { Screens } from './ui/Screens.js';
 import { Save } from './systems/Save.js';
+import { AudioSystem } from './systems/Audio.js';
 import { LEVELS } from './data/levels.js';
 import { CLASSES, CLASS_ORDER } from './data/classes.js';
 
@@ -16,6 +17,12 @@ function openStorage() {
     }
 }
 
+// Звук синтезируется через Web Audio; контекст создаётся при первом действии игрока.
+const audio = new AudioSystem(() => new (window.AudioContext ?? window.webkitAudioContext)());
+for (const type of ['pointerdown', 'keydown']) {
+    window.addEventListener(type, () => audio.unlock(), { once: true });
+}
+
 const renderer = new Renderer(document.getElementById('game'));
 const input = new InputHandler(window);
 const screens = new Screens(document);
@@ -25,6 +32,7 @@ const game = new Game({
     input,
     renderer,
     save: new Save(openStorage()),
+    audio,
     onStateChange: (state, current) => screens.onState(state, current),
 });
 
@@ -42,6 +50,7 @@ screens.bind({
     equip: (index) => game.equipItem(index),
     unequip: (slot) => game.unequipSlot(slot),
     dismantle: (index) => game.dismantleItem(index),
+    volume: (value) => game.setVolume(value),
 });
 
 screens.renderClasses(
@@ -58,4 +67,5 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('resize', () => renderer.resize());
 renderer.resize();
+game.setVolume(game.volume);
 screens.onState('menu', game);

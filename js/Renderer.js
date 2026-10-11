@@ -352,6 +352,20 @@ export class Renderer {
                 // След удара скелета.
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(effect.x, effect.y + effect.h / 2 - 2, effect.w, 4);
+            } else if (effect.kind === 'particle') {
+                ctx.fillStyle = effect.color;
+                ctx.fillRect(Math.round(effect.x), Math.round(effect.y), 2, 2);
+            } else if (effect.kind === 'number') {
+                // Число урона всплывает вверх; критический удар — жёлтым с восклицанием.
+                const text = effect.crit ? `${effect.text}!` : effect.text;
+                const y = Math.round(effect.y - progress * 12);
+                ctx.font = '8px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = '#1a1423';
+                ctx.fillText(text, Math.round(effect.x) + 1, y + 1);
+                ctx.fillStyle = effect.crit ? '#ffd75e' : '#ffffff';
+                ctx.fillText(text, Math.round(effect.x), y);
             }
             ctx.restore();
         }

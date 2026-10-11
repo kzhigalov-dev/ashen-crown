@@ -39,6 +39,7 @@ export class Player extends Entity {
         this.swingHit = { damage: 0, crit: false };  // урон текущего взмаха
         this.dashHit = { damage: 0, crit: false };   // урон текущего рывка
         this.actions = [];    // удары и выстрелы этого шага — их забирает Game
+        this.events = [];     // что произошло за шаг (для звука): jump, attack, shot…
     }
 
     update(dt, input, level) {
@@ -79,11 +80,13 @@ export class Player extends Entity {
             this.vy = -JUMP_SPEED;
             this.jumpBuffer = 0;
             this.coyote = 0;
+            this.events.push('jump');
         } else if (pressed && this.jumpsLeft > 0) {
             // Прыжок в воздухе: чуть слабее обычного.
             this.vy = -JUMP_SPEED * AIR_JUMP_FACTOR;
             this.jumpBuffer = 0;
             this.jumpsLeft--;
+            this.events.push('jump');
         }
 
         // Клавиша отпущена на взлёте — срезаем скорость, прыжок получается ниже.
@@ -124,6 +127,7 @@ export class Player extends Entity {
         if (attack.type === 'melee') {
             this.swingId = nextActionId++;
             this.swingHit = this.rollDamage(attack.damage);
+            this.events.push('attack');
         } else {
             this.fire(attack);
         }
@@ -141,6 +145,7 @@ export class Player extends Entity {
             this.dashTime = ability.duration;
             this.dashId = nextActionId++;
             this.dashHit = this.rollDamage(ability.damage);
+            this.events.push('dash');
             this.invuln = Math.max(this.invuln, ability.duration + 0.1);
         } else if (ability.type === 'projectile') {
             this.fire(ability);
@@ -148,6 +153,7 @@ export class Player extends Entity {
             const cx = this.x + this.w / 2;
             const cy = this.y + this.h / 2;
             const r = ability.radius;
+            this.events.push('blast');
             this.actions.push({
                 type: 'blast', id: nextActionId++, ...this.rollDamage(ability.damage), dir: 0,
                 x: cx, y: cy, radius: r,
@@ -159,6 +165,7 @@ export class Player extends Entity {
     // Выстрел: снаряд появляется у самого героя на уровне пояса —
     // так он попадает и по врагу вплотную, и по низкому врагу.
     fire(move) {
+        this.events.push('shot');
         this.actions.push({
             type: 'projectile',
             kind: move.projectile,
@@ -186,6 +193,12 @@ export class Player extends Entity {
         const actions = this.actions;
         this.actions = [];
         return actions;
+    }
+
+    takeEvents() {
+        const events = this.events;
+        this.events = [];
+        return events;
     }
 
     // Урон от врагов и ловушек. Возвращает false, если урон не прошёл.

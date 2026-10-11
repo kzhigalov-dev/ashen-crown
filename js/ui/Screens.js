@@ -28,11 +28,15 @@ export class Screens {
     }
 
     // handlers — действия по значению data-action, а также
-    // play(index), equip(index), unequip(slot), dismantle(index).
+    // play(index), equip(index), unequip(slot), dismantle(index), volume(value).
     bind(handlers) {
         this.handlers = handlers;
         for (const button of this.root.querySelectorAll('[data-action]')) {
             button.addEventListener('click', () => handlers[button.dataset.action]());
+        }
+        // Ползунки громкости в меню и в паузе управляют одним значением.
+        for (const slider of this.root.querySelectorAll('.volume-input')) {
+            slider.addEventListener('input', () => handlers.volume(Number(slider.value) / 100));
         }
     }
 
@@ -80,6 +84,9 @@ export class Screens {
         this.pauseButton.hidden = state !== 'playing';
         for (const element of this.root.querySelectorAll('[data-gold]')) {
             element.textContent = game.gold;
+        }
+        for (const slider of this.root.querySelectorAll('.volume-input')) {
+            slider.value = Math.round(game.volume * 100);
         }
 
         if (state === 'menu') {
