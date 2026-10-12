@@ -16,7 +16,7 @@ import {
     HAZARD_DAMAGE, HAZARD_INSET, INVULN_TIME, COIN_VALUE, CAMERA_LERP, NOTICE_TIME,
     TILE, MAX_SUMMONED, PILLAR_PERIOD, PILLAR_DAMAGE,
     DEATH_TIME, INTRO_TIME, BANNER_TIME, LORE_TIME, SHAKE_DECAY, HITSTOP, HURT_FLASH,
-    RECOIL_TIME, HEART_CHANCE, HEART_HEAL,
+    RECOIL_TIME, HEART_CHANCE, HEART_HEAL, COMBAT_RANGE, COMBAT_HOLD,
 } from './data/constants.js';
 
 // Состояния игры:
@@ -76,6 +76,7 @@ export class Game {
         this.intro = 0;             // остаток заставки с названием локации, с
         this.hurtFlash = 0;         // остаток красной вспышки, с
         this.dying = 0;             // остаток паузы после гибели героя, с
+        this.combat = 0;            // сколько ещё секунд музыка считает, что идёт бой
         this.checkpoint = null;
         this.rested = new Set();
         this.gold = 0;              // золото текущего забега
@@ -307,6 +308,7 @@ export class Game {
         this.intro = INTRO_TIME;
         this.hurtFlash = 0;
         this.dying = 0;
+        this.combat = 0;
         this.gold = 0;
         this.time = 0;
         this.accumulator = 0;
@@ -393,6 +395,7 @@ export class Game {
         this.intro = Math.max(0, this.intro - dt);
         this.shake = Math.max(0, this.shake - SHAKE_DECAY * dt);
         this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+        this.combat = Math.max(0, this.combat - dt);
         for (const key of ['notice', 'lore', 'banner']) {
             if (this[key] && (this[key].ttl -= dt) <= 0) this[key] = null;
         }
@@ -492,6 +495,7 @@ export class Game {
     // Всё, что сопровождает урон герою: звук, вспышка, тряска, замирание кадра.
     feelHurt() {
         this.emit('hurt');
+        this.combat = COMBAT_HOLD;
         this.stats.hits++;
         this.hurtFlash = HURT_FLASH;
         this.freeze = Math.max(this.freeze, HITSTOP * 2);
@@ -633,6 +637,20 @@ export class Game {
         this.enemies = this.enemies
             .filter((enemy) => !enemy.dead && enemy.y <= level.height)
             .concat(summoned);
+
+        // Враг рядом — музыка переходит в «бой».
+        const close = (enemy) =>
+            Math.abs(enemy.x + enemy.w / 2 - (player.x + player.w / 2)) < COMBAT_RANGE
+            && Math.abs(enemy.y - player.y) < 70;
+        if (this.enemies.some(close)) this.combat = COMBAT_HOLD;
+    }
+
+    // Накал для музыки: 0 — герой идёт один, 1 — рядом враги или идёт бой,
+    // 2 — бой со стражем.
+    get tension() {
+        if (!this.level) return 0;
+        if (this.bossAlive && this.enemies.some((enemy) => enemy.def.boss && enemy.awake)) return 2;
+        return this.combat > 0 ? 1 : 0;
     }
 
     // Применяет действие врага: удар, выстрел, ловушку или призыв.
@@ -830,6 +848,7 @@ export class Game {
     hitEnemy(enemy, damage, id, dir, crit = false, freeze = 0, impact = true) {
         if (!enemy.hit(damage, id, dir, freeze)) return false;
         this.emit('hit');
+        this.combat = COMBAT_HOLD;
         if (impact) this.freeze = Math.max(this.freeze, HITSTOP);
         if (crit) this.addShake(2);
         this.effects.push({

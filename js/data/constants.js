@@ -40,6 +40,10 @@ export const LORE_TIME = 4.5;      // сколько видна записка �
 export const SHAKE_DECAY = 24;     // на сколько пикселей в секунду затухает тряска
 export const HITSTOP = 0.02;       // замирание кадра при ударе ближнего боя
 export const RECOIL_TIME = 0.45;   // на сколько враг отскакивает после того, как ранил героя
+// Музыка считает, что идёт бой, пока враг ближе COMBAT_RANGE или недавно был удар:
+// после последнего повода «бой» держится ещё COMBAT_HOLD секунд.
+export const COMBAT_RANGE = 130;
+export const COMBAT_HOLD = 3;
 // Сердце, выпадающее из врагов: шанс и сколько лечит
 export const HEART_CHANCE = 0.12;
 export const HEART_HEAL = 20;

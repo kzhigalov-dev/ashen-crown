@@ -1401,3 +1401,55 @@ test('окно находки можно выключить: предмет мо
     assert.equal(game.gold, 6);
     assert.match(game.notice.text, /Сумка полна/);
 });
+
+// ---------- Накал для музыки ----------
+
+test('накал: один — 0, враг рядом или бой — 1 и держится три секунды', () => {
+    const { game, input } = arena();
+    for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
+    game.player.x = 3;
+    game.enemies.forEach((enemy) => { enemy.x = 600; });   // враги далеко
+    run(game, input, 5);
+    assert.equal(game.tension, 0);
+
+    game.enemies[0].x = 60;
+    run(game, input, 2);
+    assert.equal(game.tension, 1, 'враг подошёл');
+    game.enemies[0].x = 600;
+    run(game, input, 60);
+    assert.equal(game.tension, 1, 'через секунду музыка ещё боевая');
+    run(game, input, 150);
+    assert.equal(game.tension, 0, 'через три секунды успокоилась');
+});
+
+test('накал: удар по врагу и ранение героя тоже включают бой', () => {
+    const { game, input } = arena();
+    game.enemies.forEach((enemy) => { enemy.x = 600; });
+    run(game, input, 2);
+    game.hitEnemy(game.enemies[0], 1, 'far', 1);
+    assert.equal(game.tension, 1);
+
+    const hurt = arena();
+    hurt.game.enemies.forEach((enemy) => { enemy.x = 600; });
+    run(hurt.game, hurt.input, 2);
+    hurt.game.player.y = hurt.game.level.height + 5;   // падение в яму
+    run(hurt.game, hurt.input, 1);
+    assert.equal(hurt.game.tension, 1);
+});
+
+test('накал: проснувшийся страж — 2, спящий и поверженный — нет; вне уровня — 0', () => {
+    const { game, input } = fight('#P..............T.E#');
+    game.player.invuln = 99;
+    const boss = game.enemies[0];
+    boss.awake = false;
+    boss.update = () => {};    // пусть спит
+    run(game, input, 2);
+    assert.notEqual(game.tension, 2);
+    boss.awake = true;
+    assert.equal(game.tension, 2);
+    boss.dead = true;
+    assert.notEqual(game.tension, 2);
+
+    const idle = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()) });
+    assert.equal(idle.tension, 0);
+});

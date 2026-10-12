@@ -98,7 +98,8 @@ function menuFrame(now) {
         renderer.drawTitle(time, LEVELS[index], classId, WEAPONS[kind].sprite);
     }
     screens.update(time);
-    audio.update();   // расписывает ближайшие ноты музыки
+    audio.setIntensity(game.tension);   // музыка уровня следует за боем
+    audio.update();                     // расписывает ближайшие ноты музыки
     requestAnimationFrame(menuFrame);
 }
 

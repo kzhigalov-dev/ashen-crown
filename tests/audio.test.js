@@ -15,11 +15,23 @@ function fakeContext() {
     };
     const context = {
         currentTime: 10,
+        sampleRate: 1000,
         state: 'suspended',
         destination: {},
         resumed: 0,
         oscillators: [],
         gains: [],
+        sources: [],     // источники шума: малый барабан и тарелки
+        createBuffer(channels, length) {
+            const data = new Float32Array(length);
+            return { length, getChannelData: () => data };
+        },
+        createBufferSource() {
+            const source = { buffer: null, started: null, stopped: null,
+                connect() {}, start(time) { this.started = time; }, stop(time) { this.stopped = time; } };
+            this.sources.push(source);
+            return source;
+        },
         resume() { this.resumed++; this.state = 'running'; },
         createOscillator() {
             const oscillator = { type: '', frequency: param(), started: null, stopped: null,
@@ -131,7 +143,8 @@ test('ноты: 69 — это ля 440 Гц, октава удваивает ч�
 test('мелодии описаны полностью: четыре такта по восемь долей', () => {
     assert.deepEqual(Object.keys(MUSIC).sort(), ['castle', 'dungeon', 'forest', 'menu']);
     for (const [name, def] of Object.entries(MUSIC)) {
-        assert.ok(def.bpm >= 50 && def.bpm <= 80, `${name}: спокойный темп`);
+        if (def.action) assert.ok(def.bpm >= 100 && def.bpm <= 140, `${name}: бодрый темп`);
+        else assert.ok(def.bpm >= 50 && def.bpm <= 80, `${name}: спокойный темп`);
         assert.equal(def.chords.length, 4, name);
         assert.equal(def.bass.length, 4, name);
         assert.equal(def.melody.length, 4, name);
@@ -144,7 +157,7 @@ test('мелодии описаны полностью: четыре такта 
             assert.equal(chord.length, 3, `${name}: трезвучия`);
             for (const note of chord) assert.ok(note >= 48 && note <= 72, name);
         }
-        for (const note of def.bass) assert.ok(note >= 36 && note <= 55, `${name}: бас ниже аккордов`);
+        for (const note of def.bass) assert.ok(note >= 28 && note <= 55, `${name}: бас ниже аккордов`);
     }
 });
 
@@ -160,9 +173,11 @@ test('музыка расписывает ноты только на ближа�
     assert.ok(context.oscillators.every((o) => o.started <= context.currentTime + 1.4));
     audio.update();
     assert.equal(context.oscillators.length, first, 'без хода времени новых нот нет');
-    context.currentTime += 1;
-    audio.update();
-    assert.ok(context.oscillators.length > first);
+    for (let i = 0; i < 4; i++) {
+        context.currentTime += 0.25;
+        audio.update();
+    }
+    assert.ok(context.oscillators.length > first, 'время пошло — появились следующие ноты');
 });
 
 test('первый такт меню: аккорд ля минор, бас и нота ми', () => {
@@ -177,7 +192,7 @@ test('первый такт меню: аккорд ля минор, бас и н
 
 test('ноты музыки нарастают и затухают плавно, без щелчков', () => {
     const { audio, context } = unlocked();
-    audio.startMusic('forest');
+    audio.startMusic('menu');
     audio.update();
     const envelope = context.gains[1].gain.calls;   // gains[0] — общий регулятор музыки
     assert.deepEqual(envelope.map((call) => call[0]), ['set', 'line', 'ramp']);
@@ -236,7 +251,7 @@ test('после долгой паузы музыка не «догоняет» 
     const before = context.oscillators.length;
     context.currentTime += 120;   // вкладка была скрыта две минуты
     audio.update();
-    assert.ok(context.oscillators.length - before < 12, `новых нот ${context.oscillators.length - before}`);
+    assert.ok(context.oscillators.length - before < 30, `новых нот ${context.oscillators.length - before}`);
     assert.ok(context.oscillators.at(-1).started >= context.currentTime, 'ноты не ставятся в прошлое');
 });
 
@@ -255,4 +270,102 @@ test('отказ браузера возобновить звук не роня�
     const audio = new AudioSystem(() => context);
     assert.doesNotThrow(() => audio.unlock());
     await new Promise((resolve) => setImmediate(resolve));   // необработанный отказ уронил бы тест
+});
+
+// ---------- Боевая музыка уровней ----------
+
+// Проигрывает один такт мелодии при заданном накале и возвращает, что прозвучало.
+function playBar(name, intensity) {
+    const { audio, context } = unlocked();
+    audio.setIntensity(intensity);
+    audio.startMusic(name);
+    const stepTime = audio.stepTime(MUSIC[name]);
+    for (let step = 0; step < 16; step++) {
+        audio.scheduleAction(audio.music, 20 + step * stepTime, stepTime);
+        audio.music.step++;
+    }
+    const kicks = context.oscillators.filter((o) => o.frequency.calls[0][1] === 150);
+    const snares = context.sources.filter((source) => Math.abs(source.stopped - source.started - 0.12) < 1e-9);
+    const hats = context.sources.filter((source) => source.stopped - source.started < 0.05);
+    const arpeggio = context.oscillators.filter((o) => o.type === 'square');
+    const bass = context.oscillators.filter((o) => o.type === 'triangle' && o.frequency.calls[0][1] < 130 && o.frequency.calls[0][1] !== 150);
+    return { context, stepTime, kicks, snares, hats, arpeggio, bass };
+}
+
+test('музыка уровней быстрее меню и идёт шестнадцатыми', () => {
+    const audio = new AudioSystem(() => fakeContext());
+    assert.equal(audio.stepTime(MUSIC.menu), 0.5);
+    for (const name of ['forest', 'castle', 'dungeon']) {
+        assert.equal(MUSIC[name].action, true);
+        assert.ok(audio.stepTime(MUSIC[name]) < 0.15, `${name}: доля короче 0,15 с`);
+    }
+    assert.equal(MUSIC.menu.action, undefined, 'меню остаётся спокойным');
+});
+
+test('накал 0 — путь: без бочки и малого барабана, редкий бас, лёгкие тарелки', () => {
+    const bar = playBar('forest', 0);
+    assert.equal(bar.kicks.length, 0);
+    assert.equal(bar.snares.length, 0);
+    assert.equal(bar.hats.length, 4);
+    assert.equal(bar.arpeggio.length, 8, 'арпеджио восьмыми');
+});
+
+test('накал 1 — бой: бочка, малый барабан на вторую и четвёртую долю, арпеджио шестнадцатыми', () => {
+    const calm = playBar('forest', 0);
+    const fight = playBar('forest', 1);
+    assert.equal(fight.kicks.length, 3);
+    assert.equal(fight.snares.length, 2);
+    const beat = fight.stepTime * 4;
+    assert.deepEqual(fight.snares.map((source) => Math.round((source.started - 20) / beat)), [1, 3]);
+    assert.equal(fight.arpeggio.length, 16);
+    assert.ok(fight.hats.length > calm.hats.length);
+    assert.ok(fight.context.oscillators.length > calm.context.oscillators.length, 'в бою слоёв больше');
+});
+
+test('накал 2 — страж: бочка на каждую долю такта, арпеджио уходит выше', () => {
+    const fight = playBar('dungeon', 1);
+    const boss = playBar('dungeon', 2);
+    assert.equal(boss.kicks.length, 4);
+    assert.equal(boss.hats.length, 16);
+    const top = (bar) => Math.max(...bar.arpeggio.map((o) => o.frequency.calls[0][1]));
+    assert.ok(top(boss) > top(fight) * 1.9, 'арпеджио поднялось на октаву');
+});
+
+test('накал ограничен 0…2 и меняется на ближайшей доле', () => {
+    const { audio, context } = unlocked();
+    audio.setIntensity(9);
+    assert.equal(audio.intensity, 2);
+    audio.setIntensity(-1);
+    assert.equal(audio.intensity, 0);
+
+    audio.startMusic('castle');
+    audio.update();
+    assert.equal(context.oscillators.filter((o) => o.frequency.calls[0][1] === 150).length, 0);
+    audio.setIntensity(2);
+    for (let i = 0; i < 8; i++) {
+        context.currentTime += 0.3;
+        audio.update();
+    }
+    assert.ok(context.oscillators.some((o) => o.frequency.calls[0][1] === 150), 'бочка вступила');
+});
+
+test('на музыку меню накал не влияет', () => {
+    const count = (intensity) => {
+        const { audio, context } = unlocked();
+        audio.setIntensity(intensity);
+        audio.startMusic('menu');
+        audio.update();
+        return context.oscillators.length + context.sources.length;
+    };
+    assert.equal(count(0), count(2));
+});
+
+test('шум для ударных создаётся один раз', () => {
+    const { audio } = unlocked();
+    audio.startMusic('forest');
+    audio.setIntensity(2);
+    const first = audio.noiseBuffer();
+    audio.update();
+    assert.equal(audio.noiseBuffer(), first);
+    assert.ok(first.getChannelData(0).some((value) => value !== 0), 'буфер заполнен шумом');
 });
