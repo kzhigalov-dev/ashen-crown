@@ -62,6 +62,7 @@ screens.bind({
     map: () => game.openMap(),
     equipment: () => game.openEquipment(),
     begin: () => game.beginLevel(),
+    next: () => game.enterLevel(game.nextIndex),
     lootEquip: () => game.takeFound(true),
     lootKeep: () => game.takeFound(false),
     play: (index) => game.enterLevel(index),

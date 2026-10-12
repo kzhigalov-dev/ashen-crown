@@ -109,6 +109,11 @@ export class Game {
         return profile ? Math.min(this.levels.length, profile.unlocked - 1) : 0;
     }
 
+    // Следующий непройденный уровень; null — пройдено всё.
+    get nextIndex() {
+        return this.cleared < this.levels.length ? this.cleared : null;
+    }
+
     // Сколько стражей повержено — столько зубцов короны позолочено.
     get crowns() {
         return this.levels.slice(0, this.cleared).filter((level) => level.boss).length;
@@ -216,7 +221,8 @@ export class Game {
     }
 
     isOpen(index) {
-        return Boolean(this.profile) && index >= 0 && index < this.levels.length && index < this.profile.unlocked;
+        return Boolean(this.profile) && Number.isInteger(index)
+            && index >= 0 && index < this.levels.length && index < this.profile.unlocked;
     }
 
     // Локация ещё не пройдена ни разу.

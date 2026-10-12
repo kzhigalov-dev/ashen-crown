@@ -167,6 +167,7 @@ export class Screens {
             this.byId('story-title').textContent = game.levelDef.name;
             this.type(this.byId('story-text'), STORY[game.levelDef.id] ?? '');
         } else if (state === 'complete') {
+            this.labelNext(this.byId('complete-next'), game, 'Дальше');
             this.byId('complete-title').textContent = game.levelDef.name;
             this.renderStats(this.byId('complete-stats'), game);
         } else if (state === 'victory') {
@@ -190,6 +191,7 @@ export class Screens {
         this.pauseButton.hidden = this.state !== 'playing';
         if (!active) return;
         const target = active.querySelector('.item.selected')
+            ?? active.querySelector('button.primary:not([hidden])')
             ?? active.querySelector('.step:not(.done):not(:disabled)')
             ?? active.querySelector('button:not(:disabled):not([hidden])');
         target?.focus();
@@ -296,8 +298,18 @@ export class Screens {
 
     // ---------- Карта ----------
 
+    // Кнопка «дальше»: ведёт на следующий непройденный уровень. Когда пройдено всё — скрыта.
+    labelNext(button, game, verb) {
+        const index = game.nextIndex;
+        button.hidden = index === null;
+        if (index === null) return;
+        const level = game.levels[index];
+        button.textContent = `${verb}: ${level.worldName} — ${level.name}`;
+    }
+
     // Карта: три мира, в каждом пять уровней. Пятый — логово стража.
     renderMap(game) {
+        this.labelNext(this.byId('map-next'), game, 'В путь');
         const { profile, levels, cleared, crowns } = game;
         this.byId('map-hero').textContent = this.classNames[profile.classId] ?? '';
         this.byId('map-gold').textContent = profile.gold;

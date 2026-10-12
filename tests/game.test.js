@@ -1471,3 +1471,23 @@ test('пробуждение стража — короткая сцена: ми�
     assert.ok(updates > 0, 'бой пошёл');
     assert.equal(input.capture, true);
 });
+
+test('следующий уровень: первый непройденный; когда пройдено всё — его нет', () => {
+    const { game } = saved('swordsman', () => 0.5, [arenaDef, arenaDef]);
+    assert.equal(game.nextIndex, 0);
+    game.enterLevel(game.nextIndex);
+    assert.equal(game.state, 'story', 'непройденный уровень начинается с сюжетного текста');
+    game.beginLevel();
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.nextIndex, 1);
+    game.enterLevel(game.nextIndex);
+    game.beginLevel();
+    assert.equal(game.levelIndex, 1);
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    assert.equal(game.nextIndex, null);
+    game.openMap();
+    game.enterLevel(game.nextIndex);
+    assert.equal(game.state, 'map', 'без следующего уровня кнопка ничего не делает');
+});
