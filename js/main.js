@@ -53,6 +53,8 @@ const game = new Game({
 screens.bind({
     continue: () => game.continueGame(),
     classes: () => game.openClassSelect(),
+    switchHero: () => game.openClassSelect(true),
+    classBack: () => (game.switching ? game.openMap() : game.toMenu()),
     resume: () => game.resume(),
     restart: () => game.restart(),
     pause: () => game.pause(),
@@ -74,7 +76,8 @@ screens.bind({
     },
 });
 
-screens.renderClasses(CLASSES, CLASS_ORDER, (id) => game.newGame(id));
+// Один экран выбора: для новой игры и для смены героя с карты.
+screens.renderClasses(CLASSES, CLASS_ORDER, (id) => (game.switching ? game.changeClass(id) : game.newGame(id)));
 screens.syncSettings(options);
 
 // Вкладка скрыта — ставим паузу, чтобы игра не шла без игрока.

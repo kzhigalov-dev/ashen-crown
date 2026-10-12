@@ -46,6 +46,7 @@ export class Screens {
         this.typing = null;       // «печатающийся» текст: { element, text, start, done }
         this.selected = null;     // выбранный предмет: { from: 'bag', index } или { from: 'slot', slot }
         this.shownAt = 0;         // когда показан текущий экран
+        this.classNames = {};     // названия классов для карты и подписей
         this.reducedMotion = root.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     }
 
@@ -76,7 +77,9 @@ export class Screens {
 
         this.byId('set-volume').addEventListener('input', (event) => handlers.setting('volume', event.target.value / 100));
         this.byId('set-music').addEventListener('input', (event) => handlers.setting('music', event.target.value / 100));
-        this.byId('set-shake').addEventListener('change', (event) => handlers.setting('shake', event.target.checked));
+        for (const key of ['shake', 'notes', 'lootPopup']) {
+            this.byId(`set-${key}`).addEventListener('change', (event) => handlers.setting(key, event.target.checked));
+        }
 
         // Звук нажатия для всех кнопок экранов.
         this.root.addEventListener('click', (event) => {
@@ -146,7 +149,14 @@ export class Screens {
             this.byId('save-warning').hidden = game.save.available;
             this.copy(this.art.crown(game.crowns), this.byId('title-crown'));
         } else if (state === 'classSelect') {
-            this.byId('reset-warning').hidden = !game.hasSave;
+            // Тот же экран служит и для новой игры, и для смены героя.
+            const current = game.switching ? game.profile.classId : null;
+            this.byId('class-title').textContent = game.switching ? 'Сменить героя' : 'Выбери охотника';
+            this.byId('reset-warning').hidden = game.switching || !game.hasSave;
+            this.byId('switch-hint').hidden = !game.switching;
+            for (const card of this.byId('class-list').children) {
+                card.classList.toggle('current', card.dataset.classId === current);
+            }
         } else if (state === 'map') {
             this.selected = null;
             this.renderMap(game);
@@ -199,7 +209,7 @@ export class Screens {
     syncSettings(values) {
         this.byId('set-volume').value = Math.round(values.volume * 100);
         this.byId('set-music').value = Math.round(values.music * 100);
-        this.byId('set-shake').checked = values.shake;
+        for (const key of ['shake', 'notes', 'lootPopup']) this.byId(`set-${key}`).checked = values[key];
     }
 
     // ---------- Сюжетный текст ----------
@@ -261,11 +271,13 @@ export class Screens {
     // ---------- Выбор класса ----------
 
     renderClasses(classes, order, onPick) {
+        this.classNames = Object.fromEntries(order.map((id) => [id, classes[id].name]));
         const list = this.byId('class-list');
         list.replaceChildren();
         for (const id of order) {
             const def = classes[id];
             const card = this.el('button', 'class-card');
+            card.dataset.classId = id;
             const picture = this.copy(this.art.portrait(id));
             picture.className = 'portrait';
             const mana = def.maxMana > 0 ? ` · Мана ${def.maxMana}` : '';
@@ -287,6 +299,7 @@ export class Screens {
     // Карта: три мира, в каждом пять уровней. Пятый — логово стража.
     renderMap(game) {
         const { profile, levels, cleared, crowns } = game;
+        this.byId('map-hero').textContent = this.classNames[profile.classId] ?? '';
         this.byId('map-gold').textContent = profile.gold;
         this.byId('map-best').textContent = profile.bestRun;
         this.copy(this.art.crown(crowns), this.byId('map-crown'));
@@ -350,7 +363,6 @@ export class Screens {
             button.disabled = true;
             return button;
         }
-        button.title = item.name;
         button.setAttribute('aria-label', item.name);
         button.style.setProperty('--rarity', rarityOf(item).color);
         if (selected) button.classList.add('selected');
@@ -365,6 +377,7 @@ export class Screens {
             this.renderEquipment(game);
             this.show();
         };
+        this.canEquip = (item) => game.canEquip(item);
         const picked = this.selected;
 
         const slots = this.byId('equip-slots');
@@ -469,7 +482,11 @@ export class Screens {
         this.describe(detail, item, fromBag ? inventory.equipped[item.slot] : null);
 
         if (fromBag) {
-            const equip = this.el('button', '', 'Надеть');
+            // Оружие другого героя лежит в сумке, но надеть его нельзя.
+            const fits = this.canEquip(item);
+            const owner = this.classNames[item.classId];
+            const equip = this.el('button', '', fits ? 'Надеть' : `Только для героя «${owner}»`);
+            equip.disabled = !fits;
             equip.addEventListener('click', () => {
                 this.selected = { from: 'slot', slot: item.slot };
                 this.handlers.equip(picked.index);

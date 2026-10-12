@@ -1295,3 +1295,109 @@ test('плавность: игра помнит прошлые положени�
     game.tick(120);
     assert.equal(game.alpha, 1, 'на паузе сглаживания нет');
 });
+
+// ---------- Смена героя и настройки надписей ----------
+
+test('смена героя: уровни, золото и сумка остаются, оружие прежнего героя уходит в сумку', () => {
+    const { game, save } = saved('swordsman', () => 0.5, [arenaDef, arenaDef]);
+    game.playLevel(0);
+    game.player.x = game.level.exit.x + 3;
+    game.update(STEP);
+    game.openMap();
+    game.profile.gold = 90;
+    game.profile.inventory.add(weaponItem('axe', 'swordsman'));
+    game.profile.inventory.add(armorItem());
+    game.equipItem(0);
+    game.equipItem(0);
+
+    game.openClassSelect(true);
+    assert.equal(game.state, 'classSelect');
+    assert.equal(game.switching, true);
+    game.changeClass('mage');
+
+    assert.equal(game.state, 'map');
+    assert.equal(game.switching, false);
+    assert.equal(game.profile.classId, 'mage');
+    assert.equal(game.profile.unlocked, 2, 'прогресс на месте');
+    assert.equal(game.profile.gold, 90);
+    assert.equal(game.profile.inventory.equipped.weapon, null);
+    assert.equal(game.profile.inventory.equipped.armor.name, 'Редкий доспех', 'броня общая — осталась надетой');
+    assert.deepEqual(game.profile.inventory.items.map((item) => item.kind), ['axe']);
+    assert.equal(save.load().classId, 'mage');
+
+    game.playLevel(1);
+    assert.equal(game.player.classDef.id, 'mage');
+    assert.equal(game.player.weapon.id, 'fireStaff', 'у нового героя оружие его класса');
+    assert.equal(game.player.maxHp, 90, 'здоровье мага плюс общая броня');
+});
+
+test('оружие другого героя лежит в сумке, но надеть его нельзя', () => {
+    const { game } = saved('swordsman');
+    game.profile.inventory.add(weaponItem('axe', 'swordsman'));
+    game.changeClass('archer');
+    assert.equal(game.canEquip(game.profile.inventory.items[0]), false);
+    game.equipItem(0);
+    assert.equal(game.profile.inventory.equipped.weapon, null);
+    game.profile.inventory.add(weaponItem('crossbow', 'archer'));
+    game.equipItem(1);
+    assert.equal(game.profile.inventory.equipped.weapon.kind, 'crossbow');
+    game.changeClass('swordsman');
+    game.equipItem(0);
+    assert.equal(game.profile.inventory.equipped.weapon.kind, 'axe', 'вернулись к мечнику — секира снова годится');
+});
+
+test('смена героя при полной сумке: оружие разбирается в золото', () => {
+    const { game } = saved('swordsman');
+    game.profile.inventory.add(weaponItem('axe', 'swordsman'));
+    game.equipItem(0);
+    for (let i = 0; i < 12; i++) game.profile.inventory.add(armorItem());
+    game.changeClass('mage');
+    assert.equal(game.profile.inventory.equipped.weapon, null);
+    assert.equal(game.profile.inventory.items.length, 12);
+    assert.equal(game.profile.gold, 2);
+});
+
+test('выбор того же героя ничего не меняет; без профиля сменить героя нельзя', () => {
+    const { game } = saved('swordsman');
+    game.profile.inventory.add(weaponItem('axe', 'swordsman'));
+    game.equipItem(0);
+    game.openClassSelect(true);
+    game.changeClass('swordsman');
+    assert.equal(game.profile.inventory.equipped.weapon.kind, 'axe');
+    assert.equal(game.state, 'map');
+
+    const fresh = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()) });
+    fresh.openClassSelect(true);
+    assert.equal(fresh.switching, false, 'профиля нет — это выбор для новой игры');
+    fresh.newGame('archer');
+    assert.equal(fresh.profile.classId, 'archer');
+});
+
+test('записки у костров можно выключить', () => {
+    const target = fakeTarget();
+    const input = new InputHandler(target);
+    const game = new Game({ levels: [{ ...levelDef, id: 'forest' }], input, options: { shake: true, notes: false } });
+    input.attach();
+    game.startLevel();
+    game.player.hp = 50;
+    game.player.x = 67;
+    game.update(STEP);
+    assert.equal(game.lore, null);
+    assert.equal(game.player.hp, 120, 'костёр по-прежнему лечит');
+});
+
+test('окно находки можно выключить: предмет молча идёт в сумку', () => {
+    const input = new InputHandler(fakeTarget());
+    const game = new Game({ levels: [arenaDef], input, options: { lootPopup: false } });
+    game.newGame('swordsman');
+    game.playLevel(0);
+    game.collectItem(armorItem());
+    assert.equal(game.state, 'playing');
+    assert.equal(game.found, null);
+    assert.equal(game.profile.inventory.items.length, 1);
+    assert.match(game.notice.text, /В сумку/);
+    for (let i = 0; i < 11; i++) game.profile.inventory.add(armorItem());
+    game.collectItem(armorItem());
+    assert.equal(game.gold, 6);
+    assert.match(game.notice.text, /Сумка полна/);
+});

@@ -30,7 +30,9 @@ export class Game {
     // rng — источник случайных чисел от 0 до 1 (в тестах подставляется свой);
     // save — хранилище прогресса (по умолчанию ничего не сохраняет);
     // audio — звуковая система с методами play(name) и setVolume(v), может отсутствовать;
-    // options — настройки игрока: shake — трясти ли экран при ударах.
+    // options — настройки игрока: shake — трясти ли экран при ударах,
+    // notes — показывать ли записки у костров, lootPopup — спрашивать ли «надеть?»
+    // при находке. Не заданная настройка считается включённой.
     constructor({
         levels, input, renderer = null, onStateChange = () => {},
         rng = Math.random, save = null, audio = null, options = { shake: true },
@@ -49,6 +51,7 @@ export class Game {
 
         this.state = 'menu';
         this.profile = null;        // прогресс: класс, снаряжение, золото
+        this.switching = false;     // экран выбора класса открыт для смены героя, а не для новой игры
         this.classId = 'swordsman'; // класс для профиля, если его ещё нет
 
         this.level = null;
@@ -122,6 +125,7 @@ export class Game {
     // ---------- Профиль и экраны между уровнями ----------
 
     newGame(classId) {
+        this.switching = false;
         this.classId = classId;
         this.profile = defaultProfile(classId);
         this.profile.volume = this.volume;
@@ -170,10 +174,32 @@ export class Game {
         this.setState('menu');
     }
 
-    openClassSelect() {
+    // switching = true — выбор открыт с карты, чтобы сменить героя без потери прогресса.
+    openClassSelect(switching = false) {
         this.stop();
         this.level = null;
+        this.switching = switching && Boolean(this.profile);
         this.setState('classSelect');
+    }
+
+    // Смена героя: уровни, золото и сумка остаются. Оружие прежнего класса
+    // уходит в сумку; если места нет — разбирается в золото.
+    changeClass(classId) {
+        const { profile } = this;
+        if (!profile || !CLASSES[classId]) return;
+        if (classId !== profile.classId) {
+            const { inventory } = profile;
+            const weapon = inventory.equipped.weapon;
+            if (weapon && !inventory.unequip('weapon')) {
+                inventory.equipped.weapon = null;
+                profile.gold += dismantleValue(weapon);
+            }
+            profile.classId = classId;
+            this.classId = classId;
+            this.persist();
+        }
+        this.switching = false;
+        this.openMap();
     }
 
     openMap() {
@@ -215,8 +241,15 @@ export class Game {
         if (this.state === 'story') this.restart();
     }
 
+    // Оружие можно надеть только своё: меч лучнику не подойдёт.
+    canEquip(item) {
+        return Boolean(item) && (item.slot !== 'weapon' || item.classId === this.profile.classId);
+    }
+
     equipItem(index) {
-        if (this.profile.inventory.equip(index)) this.profileChanged();
+        const { inventory } = this.profile;
+        if (!this.canEquip(inventory.items[index])) return;
+        if (inventory.equip(index)) this.profileChanged();
     }
 
     unequipSlot(slot) {
@@ -245,8 +278,7 @@ export class Game {
         this.level = new Level(this.levelDef);
         // Надетое оружие задаёт атаку и способность; без него — оружие класса по умолчанию.
         const { inventory } = this.profile;
-        const weapon = WEAPONS[inventory.equipped.weapon?.kind] ?? WEAPONS[classDef.starter];
-        this.player = new Player(classDef, { bonus: inventory.totals(), rng: this.rng, weapon });
+        this.player = new Player(classDef, { bonus: inventory.totals(), rng: this.rng, weapon: this.heroWeapon() });
         this.player.placeAt(this.level.spawn);
         this.checkpoint = this.level.spawn;
         this.rested = new Set();    // костры, у которых герой уже лечился
@@ -409,7 +441,7 @@ export class Game {
             }
             // У каждого костра лежит записка — кусочек истории. На разных уровнях
             // мира записки разные: номер зависит от уровня и от костра.
-            const notes = LORE[this.world];
+            const notes = this.options.notes !== false && LORE[this.world];
             if (notes) {
                 const index = ((this.levelDef.number ?? 1) - 1) * 2 + level.checkpoints.indexOf(checkpoint);
                 this.lore = { text: notes[index % notes.length], ttl: LORE_TIME };
@@ -717,9 +749,22 @@ export class Game {
 
     // Найден предмет: он кладётся в сумку, игра встаёт на паузу и спрашивает,
     // надеть ли его сразу. index = null — сумка полна, предмет ещё не в ней.
+    // Если окно находки выключено в настройках, предмет молча идёт в сумку
+    // (а при полной сумке разбирается).
     collectItem(item) {
         const { inventory } = this.profile;
         const index = inventory.add(item) ? inventory.items.length - 1 : null;
+        if (this.options.lootPopup === false) {
+            this.emit('item');
+            let text = `В сумку: ${item.name}`;
+            if (index === null) {
+                const gold = dismantleValue(item);
+                this.gold += gold;
+                text = `Сумка полна, разобрано: +${gold} золота`;
+            }
+            this.notice = { text, color: rarityOf(item).color, ttl: NOTICE_TIME };
+            return;
+        }
         this.found = { item, index };
         this.emit('item');
         this.setState('loot');
@@ -753,9 +798,14 @@ export class Game {
 
     // Пересчитывает бонусы и оружие героя по надетому снаряжению.
     applyGear() {
+        this.player.setGear(this.profile.inventory.totals(), this.heroWeapon());
+    }
+
+    // Вид оружия героя: надетое, если оно его класса, иначе оружие класса по умолчанию.
+    heroWeapon() {
         const { inventory, classId } = this.profile;
-        const weapon = WEAPONS[inventory.equipped.weapon?.kind] ?? WEAPONS[CLASSES[classId].starter];
-        this.player.setGear(inventory.totals(), weapon);
+        const kind = WEAPONS[inventory.equipped.weapon?.kind];
+        return kind?.classId === classId ? kind : WEAPONS[CLASSES[classId].starter];
     }
 
     // Цепная молния: бьёт ближайших врагов в радиусе, перескакивая от одного к другому.

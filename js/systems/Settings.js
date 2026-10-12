@@ -8,6 +8,8 @@ export function defaultSettings() {
         volume: 0.5,   // громкость эффектов, 0…1
         music: 0.3,    // громкость фона, 0…1
         shake: true,   // тряска экрана при ударах
+        notes: true,   // записки у костров
+        lootPopup: true,  // окно с вопросом «надеть?» при находке предмета
     };
 }
 
@@ -27,7 +29,9 @@ export class Settings {
             const data = JSON.parse(this.storage.getItem(SETTINGS_KEY)) ?? {};
             if (isLevel(data.volume)) values.volume = data.volume;
             if (isLevel(data.music)) values.music = data.music;
-            if (typeof data.shake === 'boolean') values.shake = data.shake;
+            for (const key of ['shake', 'notes', 'lootPopup']) {
+                if (typeof data[key] === 'boolean') values[key] = data[key];
+            }
         } catch {
             // Хранилища нет или в нём мусор — остаются значения по умолчанию.
         }

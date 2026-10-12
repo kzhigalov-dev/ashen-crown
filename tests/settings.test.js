@@ -13,13 +13,14 @@ test('настройка сохраняется и читается после �
     settings.load();
     settings.set('volume', 0.8);
     settings.set('shake', false);
-    assert.deepEqual(new Settings(storage).load(), { volume: 0.8, music: 0.3, shake: false });
+    settings.set('notes', false);
+    assert.deepEqual(new Settings(storage).load(), { volume: 0.8, music: 0.3, shake: false, notes: false, lootPopup: true });
 });
 
 test('негодные значения заменяются по одному, годные остаются', () => {
     const storage = memoryStorage();
-    storage.setItem(SETTINGS_KEY, JSON.stringify({ volume: 9, music: 0.1, shake: 'да' }));
-    assert.deepEqual(new Settings(storage).load(), { volume: 0.5, music: 0.1, shake: true });
+    storage.setItem(SETTINGS_KEY, JSON.stringify({ volume: 9, music: 0.1, shake: 'да', lootPopup: false, notes: 0 }));
+    assert.deepEqual(new Settings(storage).load(), { volume: 0.5, music: 0.1, shake: true, notes: true, lootPopup: false });
 });
 
 test('битые данные и отсутствие хранилища не ломают игру', () => {

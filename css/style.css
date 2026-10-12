@@ -697,7 +697,7 @@ input:focus-visible {
 
 /* Название локации в начале уровня: появляется и тает. */
 .hud-card {
-    top: 26%;
+    top: 20%;
     display: flex;
     flex-direction: column;
     gap: 0.4em;
@@ -707,14 +707,14 @@ input:focus-visible {
 
 .hud-card strong {
     font-family: var(--display);
-    font-size: 2.8em;
+    font-size: 2.2em;
     font-weight: normal;
     color: var(--gold-light);
 }
 
 /* Объявление о боссе. */
 .hud-banner {
-    top: 20%;
+    top: 22%;
     display: flex;
     flex-direction: column;
     gap: 0.3em;
@@ -724,38 +724,52 @@ input:focus-visible {
 
 .hud-banner strong {
     font-family: var(--display);
-    font-size: 2.2em;
+    font-size: 1.7em;
     font-weight: normal;
     color: var(--ember);
 }
 
 .hud-banner em {
     font-family: var(--text);
-    font-size: 1.2em;
+    font-size: 1em;
+}
+
+.class-card.current {
+    border-color: var(--gold);
+}
+
+/* Сообщения и записки — узкой стопкой под верхним краем, чтобы не закрывать героя. */
+.hud-stack {
+    top: 10%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3em;
+    width: 76%;
+}
+
+.hud-toast,
+.hud-lore {
+    margin: 0;
+    padding: 0.15em 0.8em;
+    background: rgba(13, 11, 16, 0.62);
+    animation: screen-in 0.25s ease-out both;
 }
 
 .hud-toast {
-    top: 12%;
-    padding: 0.2em 0.8em;
-    background: rgba(13, 11, 16, 0.7);
-    font-size: 0.95em;
+    font-size: 0.85em;
     white-space: nowrap;
-    animation: screen-in 0.25s ease-out both;
 }
 
 /* Записка у костра. */
 .hud-lore {
-    bottom: 13%;
-    width: 60%;
-    padding: 0.5em 1em;
-    border-left: 0.2em solid var(--ember);
-    background: rgba(13, 11, 16, 0.78);
+    max-width: 100%;
+    border-left: 0.15em solid var(--ember);
     font-family: var(--text);
     font-style: italic;
-    font-size: 1.1em;
-    line-height: 1.45;
-    text-align: left !important;
-    animation: screen-in 0.5s ease-out both;
+    font-size: 0.95em;
+    line-height: 1.35;
+    color: rgba(230, 220, 198, 0.9);
 }
 
 .hud-boss {

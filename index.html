@@ -27,8 +27,11 @@
                 <strong id="hud-banner-title"></strong>
                 <em id="hud-banner-text"></em>
             </div>
-            <p id="hud-toast" class="hud-toast" hidden></p>
-            <p id="hud-lore" class="hud-lore" hidden></p>
+            <!-- Сообщения складываются стопкой у верхнего края и не закрывают героя -->
+            <div class="hud-stack">
+                <p id="hud-toast" class="hud-toast" hidden></p>
+                <p id="hud-lore" class="hud-lore" hidden></p>
+            </div>
             <p id="hud-boss" class="hud-boss" hidden></p>
         </div>
         <button id="btn-pause" class="hud-button" data-action="pause" hidden>Пауза <kbd>P</kbd></button>
@@ -76,6 +79,14 @@
                 <input type="checkbox" id="set-shake">
                 <span>Тряска экрана при ударах</span>
             </label>
+            <label class="field check">
+                <input type="checkbox" id="set-notes">
+                <span>Записки у костров</span>
+            </label>
+            <label class="field check">
+                <input type="checkbox" id="set-lootPopup">
+                <span>Окно «надеть?» при находке предмета</span>
+            </label>
             <p class="hint">Ползунок в нуле выключает звук. Настройки хранятся в этом браузере.</p>
             <button data-back>Назад</button>
         </section>
@@ -96,10 +107,11 @@
         </section>
 
         <section id="screen-class" class="screen wide" hidden>
-            <h2>Выбери охотника</h2>
+            <h2 id="class-title">Выбери охотника</h2>
             <p id="reset-warning" class="hint warn" hidden>Сохранённый прогресс будет стёрт.</p>
+            <p id="switch-hint" class="hint" hidden>Уровни, золото и сумка останутся. Оружие прежнего героя ляжет в сумку.</p>
             <div id="class-list" class="class-list"></div>
-            <button data-action="menu" class="quiet">Назад</button>
+            <button data-action="classBack" class="quiet">Назад</button>
         </section>
 
         <section id="screen-map" class="screen wide" hidden>
@@ -109,11 +121,12 @@
                     <h2>Карта</h2>
                     <p id="map-crown-text" class="hint"></p>
                 </div>
-                <p class="purse">Золото <strong id="map-gold">0</strong><br>Рекорд за вылазку <strong id="map-best">0</strong></p>
+                <p class="purse">Герой <strong id="map-hero"></strong><br>Золото <strong id="map-gold">0</strong><br>Рекорд за вылазку <strong id="map-best">0</strong></p>
             </header>
             <div id="map-list" class="map-list"></div>
             <div class="row">
                 <button data-action="equipment">Снаряжение</button>
+                <button data-action="switchHero">Сменить героя</button>
                 <button data-action="menu" class="quiet">В меню</button>
             </div>
         </section>
