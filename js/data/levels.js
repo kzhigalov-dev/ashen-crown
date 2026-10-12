@@ -326,6 +326,7 @@ const DUNGEON = {
 //   backdrop          — вид силуэтов: trees (ели) или columns (колонны);
 //   moon              — цвет луны или null; fog — цвет тумана;
 //   particles         — что летает в воздухе: ash (пепел), dust (пыль), embers (искры);
+//   dark              — цвет и плотность темноты; её разгоняют герой, костры, огонь;
 //   tiles             — перекраска тайлов земли (ключи — символы палитры из data/sprites.js).
 // boss — страж мира (id из data/enemies.js).
 // levels — пять уровней: название и участки по порядку.
@@ -339,6 +340,7 @@ export const WORLDS = [
             sky: '#141b2b', skyTop: '#0b101c', skyBottom: '#26384c',
             far: '#15242b', mid: '#1a2f36', near: '#21403a',
             backdrop: 'trees', moon: '#d9e4d2', fog: '#8fb0b0', particles: 'ash', tiles: null,
+            dark: 'rgba(4, 7, 16, 0.48)',
         },
         levels: [
             { name: 'Опушка', parts: ['start', 'gap', 'camp', 'meadow', 'ruins', 'exit'] },
@@ -357,6 +359,7 @@ export const WORLDS = [
             sky: '#16161f', skyTop: '#0c0c14', skyBottom: '#2c2e44',
             far: '#191a24', mid: '#21232f', near: '#2b2d3a',
             backdrop: 'columns', moon: '#c9cde0', fog: '#9aa0b5', particles: 'dust',
+            dark: 'rgba(5, 5, 14, 0.52)',
             tiles: { G: '#9aa0ad', g: '#6a6f7d', d: '#4a4d5a', D: '#5f6372', e: '#3a3c48' },
         },
         levels: [
@@ -376,6 +379,7 @@ export const WORLDS = [
             sky: '#1a0f12', skyTop: '#0f0809', skyBottom: '#521812',
             far: '#200f11', mid: '#2c1315', near: '#3d1a18',
             backdrop: 'columns', moon: null, fog: '#e2572b', particles: 'embers',
+            dark: 'rgba(12, 3, 4, 0.46)',
             tiles: { G: '#a8492e', g: '#6e2f22', d: '#33201f', D: '#4a2a26', e: '#221514' },
         },
         levels: [

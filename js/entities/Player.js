@@ -41,6 +41,8 @@ export class Player extends Entity {
         this.dashId = 0;
         this.swingHit = { damage: 0, crit: false };  // урон текущего взмаха
         this.dashHit = { damage: 0, crit: false };   // урон текущего рывка
+        this.squash = 0;      // растяжение (+) и сжатие (−) фигуры: прыжок и приземление
+        this.hurtTime = 0;    // сколько ещё герой «отшатывается» после ранения
         this.actions = [];    // удары и выстрелы этого шага — их забирает Game
         this.events = [];     // что произошло за шаг (для звука): jump, attack, shot…
     }
@@ -50,6 +52,8 @@ export class Player extends Entity {
         this.abilityCooldown = Math.max(0, this.abilityCooldown - dt);
         this.attackTime = Math.max(0, this.attackTime - dt);
         this.invuln = Math.max(0, this.invuln - dt);
+        this.hurtTime = Math.max(0, this.hurtTime - dt);
+        this.squash *= Math.max(0, 1 - 12 * dt);   // фигура быстро возвращает форму
         this.mana = Math.min(this.maxMana, this.mana + this.classDef.manaRegen * dt);
         this.animTime += dt;
 
@@ -86,12 +90,14 @@ export class Player extends Entity {
             this.vy = -JUMP_SPEED;
             this.jumpBuffer = 0;
             this.coyote = 0;
+            this.squash = 0.16;
             this.events.push('jump');
         } else if (pressed && this.jumpsLeft > 0) {
             // Прыжок в воздухе: чуть слабее обычного.
             this.vy = -JUMP_SPEED * AIR_JUMP_FACTOR;
             this.jumpBuffer = 0;
             this.jumpsLeft--;
+            this.squash = 0.16;
             this.events.push('jump');
         }
 
@@ -104,7 +110,10 @@ export class Player extends Entity {
         const fallSpeed = this.vy;
         this.onGround = moveAndCollide(this, level, dt).onGround;
         // Приземление после заметного падения — для пыли и звука.
-        if (wasAirborne && this.onGround && fallSpeed > 150) this.events.push('land');
+        if (wasAirborne && this.onGround && fallSpeed > 150) {
+            this.squash = -0.2;
+            this.events.push('land');
+        }
 
         if (!this.onGround) this.state = 'jump';
         else this.state = dir !== 0 ? 'run' : 'idle';
@@ -244,6 +253,7 @@ export class Player extends Entity {
         if (this.dead || this.invuln > 0) return false;
         this.takeDamage(amount);
         this.invuln = INVULN_TIME;
+        this.hurtTime = 0.25;
         return true;
     }
 

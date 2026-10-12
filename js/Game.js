@@ -77,6 +77,7 @@ export class Game {
         this.hurtFlash = 0;         // остаток красной вспышки, с
         this.dying = 0;             // остаток паузы после гибели героя, с
         this.combat = 0;            // сколько ещё секунд музыка считает, что идёт бой
+        this.lastStep = 0;          // когда из-под ног в последний раз вылетела пыль
         this.checkpoint = null;
         this.rested = new Set();
         this.gold = 0;              // золото текущего забега
@@ -309,6 +310,7 @@ export class Game {
         this.hurtFlash = 0;
         this.dying = 0;
         this.combat = 0;
+        this.lastStep = 0;
         this.gold = 0;
         this.time = 0;
         this.accumulator = 0;
@@ -455,6 +457,7 @@ export class Game {
         if (fellOut || touchesTile(this.hazardBox(), level, HAZARD)) {
             player.takeDamage(HAZARD_DAMAGE);
             player.invuln = INVULN_TIME;
+            player.hurtTime = 0.25;
             this.feelHurt();
             if (!player.dead) player.placeAt(this.checkpoint);
         }
@@ -485,6 +488,15 @@ export class Game {
         }
         if (player.dashTime > 0) {
             this.trail.push({ x: player.x, y: player.y, facing: player.facing, ttl: 0.18 });
+        }
+        // На бегу из-под ног летит пыль.
+        if (player.state === 'run' && player.onGround && this.time - this.lastStep > 0.24) {
+            this.lastStep = this.time;
+            const x = player.x + player.w / 2 - player.facing * 4;
+            this.effects.push({
+                kind: 'particle', color: '#8f8794', x, y: player.y + player.h - 2,
+                vx: -player.facing * 22, vy: -18, ttl: 0.25, life: 0.25,
+            });
         }
     }
 
@@ -718,6 +730,13 @@ export class Game {
     dropLoot(enemy) {
         const x = enemy.x + enemy.w / 2;
         const y = enemy.y + enemy.h / 2;
+        // Поверженный враг не исчезает мгновенно: его фигура отлетает, заваливается и тает.
+        this.effects.push({
+            kind: 'corpse', type: enemy.type, facing: enemy.facing, boss: enemy.def.boss === true,
+            x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h,
+            vx: (enemy.knockDir || -enemy.facing) * 45, vy: enemy.def.boss ? 0 : -95,
+            ttl: enemy.def.boss ? 1.2 : 0.5, life: enemy.def.boss ? 1.2 : 0.5,
+        });
         this.emit(enemy.def.boss ? 'bossDown' : 'kill');
         this.burst(x, y, enemy.def.color ?? '#ffffff', enemy.def.boss ? 24 : 8);
         this.stats.kills++;
@@ -881,7 +900,7 @@ export class Game {
     updateEffects(dt) {
         for (const effect of this.effects) {
             effect.ttl -= dt;
-            if (effect.kind !== 'particle') continue;
+            if (effect.vx === undefined) continue;   // летят только частицы и поверженные враги
             effect.x += effect.vx * dt;
             effect.y += effect.vy * dt;
             effect.vy += 400 * dt;

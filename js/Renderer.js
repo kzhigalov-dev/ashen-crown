@@ -1,4 +1,4 @@
-import { TILE, VIEW_W, VIEW_H, INTRO_TIME, HURT_FLASH } from './data/constants.js';
+import { TILE, VIEW_W, VIEW_H, INTRO_TIME, HURT_FLASH, DEATH_TIME } from './data/constants.js';
 import { SOLID } from './Level.js';
 import { PALETTE, SPRITES, GLYPHS, HEROES } from './data/sprites.js';
 import { CLASSES } from './data/classes.js';
@@ -26,6 +26,8 @@ const HOLD = {
     staffIce: { x: 11, y: -2 },
     staffStorm: { x: 11, y: -2 },
 };
+// Кисть фигуры: вокруг этой точки спрайта оружие поворачивается при взмахе.
+const HAND = { x: 13, y: 12 };
 // След удара ближнего боя: взмах или выпад.
 const SWING = {
     slash: { x: 13, y: -1 },
@@ -134,6 +136,14 @@ export class Renderer {
         }
 
         this.tileSets = {};  // тайлы земли в цветах локации, строятся при первом показе
+
+        // Темнота: отдельный холст, залитый полумраком, в котором источники света
+        // «прожигают» дыры. Потом он накладывается на мир.
+        this.shade = document.createElement('canvas');
+        this.shade.width = VIEW_W;
+        this.shade.height = VIEW_H;
+        this.shadeCtx = this.shade.getContext('2d');
+        this.lights = [];    // источники света кадра: [x, y, радиус, сила] в экранных координатах
         this.vignette = buildVignette('rgba(5, 4, 8, 0.62)');
         this.danger = buildVignette('rgba(226, 87, 43, 0.9)');
     }
@@ -242,6 +252,9 @@ export class Renderer {
         const shakeY = Math.round(Math.cos(time * 71) * game.shake);
         const camX = this.snap(this.between(game.camera.prevX, game.camera.x)) + shakeX;
         const camY = Math.round(game.camera.y) + shakeY;
+        this.lights = [];
+        this.camX = camX;
+        this.camY = camY;
 
         this.drawScene(theme, time, camX);
 
@@ -252,13 +265,15 @@ export class Renderer {
         this.drawHazards(game.hazards, time);
         this.drawEnemies(game.enemies);
         this.drawTrail(game);
-        if (!player.dead) this.drawPlayer(player);
+        this.drawPlayer(player, game);
         this.drawShots(game.projectiles);
         this.drawShots(game.enemyShots);
         this.drawEffects(game.effects);
         ctx.restore();
 
         this.drawAir(theme, time, camX);
+        this.collectLights(game);
+        this.drawShade(theme);
         ctx.drawImage(this.vignette, 0, 0);
 
         // Мало здоровья — края экрана пульсируют красным; урон — короткая вспышка.
@@ -293,6 +308,7 @@ export class Renderer {
         const ground = VIEW_H - 44;
         ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
 
+        this.lights = [];
         this.drawScene(theme, time, 0);
         for (let x = 0; x < VIEW_W; x += TILE) {
             ctx.drawImage(tiles.groundTop, x, ground);
@@ -308,6 +324,10 @@ export class Renderer {
         this.drawFigure(hero, 320, ground - hero.height, true, weaponSprite, 1, Math.floor(time * 2) % 2);
 
         this.drawAir(theme, time, 0);
+        this.camX = 0;
+        this.camY = 0;
+        this.light(357, ground - 8, 110 + Math.sin(time * 9) * 4, 1);
+        this.drawShade(theme);
         ctx.drawImage(this.vignette, 0, 0);
         this.overlay?.sync(null);
     }
@@ -363,6 +383,7 @@ export class Renderer {
         const cy = 48;
         const radius = 14;
         this.glow(cx, cy, 52, color, 0.16);
+        this.lights.push([cx, cy, 80, 0.75]);
         ctx.fillStyle = color;
         for (let dy = -radius; dy <= radius; dy++) {
             const half = Math.floor(Math.sqrt(radius * radius - dy * dy));
@@ -426,6 +447,7 @@ export class Renderer {
                 ctx.fillStyle = '#ffd75e';
                 ctx.fillRect(x + 10, fy + 2, 2, 3);
                 this.glow(x + 11, fy + 2, 30, '#f28a2e', 0.2 + flicker * 0.04);
+                this.lights.push([x + 11, fy + 2, 52 + flicker * 3, 0.7]);
             }
         }
     }
@@ -460,6 +482,66 @@ export class Renderer {
         ctx.globalAlpha = 1;
     }
 
+    // ---------- Свет ----------
+
+    // Источник света в координатах мира.
+    light(x, y, radius, strength = 1) {
+        this.lights.push([x - this.camX, y - this.camY, radius, strength]);
+    }
+
+    // Собирает всё, что светится в этом кадре: героя, костры, портал, снаряды,
+    // огненные ловушки, заклинания, добычу. Лава и факелы добавляют себя сами при отрисовке.
+    collectLights(game) {
+        const { player, time } = game;
+        const hero = this.pos(player);
+        this.light(hero.x + player.w / 2, hero.y + player.h / 2, 104, 1);
+        if (game.checkpoint && game.checkpoint !== game.level.spawn) {
+            const fire = game.checkpoint;
+            this.light(fire.x + 8, fire.y + 6, 96 + Math.sin(time * 9) * 4, 1);
+        }
+        if (!game.bossAlive) this.light(game.level.exit.x + 8, game.level.exit.y + 8, 64, 0.9);
+        for (const shot of [...game.projectiles, ...game.enemyShots]) {
+            if (SHOT_GLOW[shot.sprite]) this.light(shot.x + shot.w / 2, shot.y + shot.h / 2, 38, 0.8);
+        }
+        for (const hazard of game.hazards) {
+            if (hazard.delay <= 0 && hazard.kind === 'pillar') this.light(hazard.x + hazard.w / 2, hazard.y + hazard.h / 2, 74, 1);
+        }
+        for (const effect of game.effects) {
+            if (effect.kind === 'blast') this.light(effect.x, effect.y, effect.radius * 1.6, effect.ttl / effect.life);
+            else if (effect.kind === 'lightning') this.light(effect.x2, effect.y2, 46, effect.ttl / effect.life);
+        }
+        for (const drop of game.drops) {
+            if (drop.kind !== 'gold') this.light(drop.x + 4, drop.y + 4, 24, 0.7);
+        }
+        for (const enemy of game.enemies) {
+            if (enemy.type === 'demon') this.light(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 80, 0.85);
+            else if (enemy.type === 'imp') this.light(enemy.x + 6, enemy.y + 6, 28, 0.6);
+        }
+    }
+
+    // Накладывает темноту с дырами от источников света.
+    drawShade(theme) {
+        const shade = this.shadeCtx;
+        shade.globalCompositeOperation = 'source-over';
+        shade.clearRect(0, 0, VIEW_W, VIEW_H);
+        shade.fillStyle = theme.dark ?? 'rgba(5, 6, 14, 0.58)';
+        shade.fillRect(0, 0, VIEW_W, VIEW_H);
+        // destination-out стирает темноту там, где рисуется свет.
+        shade.globalCompositeOperation = 'destination-out';
+        for (const [x, y, radius, strength] of this.lights) {
+            const gradient = shade.createRadialGradient(x, y, 0, x, y, radius);
+            gradient.addColorStop(0, `rgba(0, 0, 0, ${strength})`);
+            gradient.addColorStop(0.5, `rgba(0, 0, 0, ${strength * 0.55})`);
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            shade.fillStyle = gradient;
+            shade.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+        }
+        // Темнота растягивается со сглаживанием: свет мягкий, без ступенек.
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.drawImage(this.shade, 0, 0);
+        this.ctx.imageSmoothingEnabled = false;
+    }
+
     // ---------- Мир ----------
 
     drawTiles(game, camX) {
@@ -469,6 +551,7 @@ export class Renderer {
         const tiles = this.tilesFor(game.levelDef);
         const first = Math.max(0, Math.floor(camX / TILE) - 1);
         const last = Math.min(level.cols - 1, Math.floor((camX + VIEW_W) / TILE) + 1);
+        this.drawProps(game, first - 3, last + 3);
         for (let row = 0; row < level.rows; row++) {
             for (let col = first; col <= last; col++) {
                 const char = level.charAt(col, row);
@@ -477,6 +560,7 @@ export class Renderer {
                 if (char === '#') {
                     const covered = level.tileAt(col, row - 1) === SOLID;
                     ctx.drawImage(covered ? tiles.ground : tiles.groundTop, x, y);
+                    this.shadeTile(level, col, row, x, y);
                     if (!covered && level.charAt(col, row - 1) === '.') this.drawDecor(theme, x, y, col, row);
                 } else if (char === '=') {
                     ctx.drawImage(tiles.platform, x, y);
@@ -492,6 +576,150 @@ export class Renderer {
                     ctx.fillRect(x + 4, y + TILE - 1, 8, 1);
                 }
             }
+        }
+    }
+
+    // Объём земли: чем глубже тайл, тем он темнее; у обрывов и нависаний — тёмная кромка.
+    shadeTile(level, col, row, x, y) {
+        const { ctx } = this;
+        let depth = 0;
+        while (depth < 4 && level.tileAt(col, row - depth - 1) === SOLID) depth++;
+        if (depth > 0) {
+            ctx.fillStyle = `rgba(0, 0, 0, ${depth * 0.12})`;
+            ctx.fillRect(x, y, TILE, TILE);
+        }
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+        if (level.tileAt(col - 1, row) !== SOLID) ctx.fillRect(x, y, 2, TILE);
+        if (level.tileAt(col + 1, row) !== SOLID) ctx.fillRect(x + TILE - 2, y, 2, TILE);
+        if (row + 1 < level.rows && level.tileAt(col, row + 1) !== SOLID) ctx.fillRect(x, y + TILE - 3, TILE, 3);
+    }
+
+    // Строка поверхности в колонке: верхний твёрдый тайл, над которым пусто.
+    // Считается один раз на уровень.
+    surface(level, col) {
+        level.surfaceRows ??= [];
+        if (level.surfaceRows[col] === undefined) {
+            let found = null;
+            for (let row = 3; row < level.rows; row++) {
+                if (level.tileAt(col, row) !== SOLID) continue;
+                if (level.charAt(col, row - 1) === '.' && level.charAt(col, row - 2) === '.') found = row;
+                break;
+            }
+            level.surfaceRows[col] = found;
+        }
+        return level.surfaceRows[col];
+    }
+
+    // Крупные предметы окружения за героем: деревья и надгробия в лесу, знамёна и окна
+    // в замке, сталагмиты и кристаллы в подземелье. Где что стоит, решает номер колонки.
+    drawProps(game, first, last) {
+        const { level } = game;
+        const { theme } = game.levelDef;
+        for (let col = Math.max(1, first); col <= Math.min(level.cols - 2, last); col++) {
+            const roll = hash(col * 3.17 + level.cols);
+            if (roll > 0.2) continue;
+            const row = this.surface(level, col);
+            if (row === null || this.surface(level, col + 1) !== row) continue;
+            const x = col * TILE;
+            const y = row * TILE;
+            const kind = Math.floor(roll * 15);   // 0, 1 или 2
+            if (theme.particles === 'ash') this.forestProp(kind, x, y);
+            else if (theme.particles === 'dust') this.castleProp(kind, x, y, game.time);
+            else this.dungeonProp(kind, x, y, game.time);
+        }
+    }
+
+    forestProp(kind, x, y) {
+        const { ctx } = this;
+        if (kind === 0) {
+            // Ель на переднем плане фона.
+            ctx.fillStyle = '#231a14';
+            ctx.fillRect(x + 6, y - 44, 5, 44);
+            for (const [dx, dy, w, color] of [[-9, -62, 34, '#1b3327'], [-5, -76, 26, '#214030'], [-1, -88, 18, '#28503a'], [3, -97, 10, '#28503a']]) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x + dx, y + dy, w, 16);
+            }
+        } else if (kind === 1) {
+            // Куст с ягодами.
+            ctx.fillStyle = '#254a31';
+            ctx.fillRect(x, y - 7, 18, 7);
+            ctx.fillRect(x + 3, y - 11, 12, 4);
+            ctx.fillStyle = '#e2572b';
+            ctx.fillRect(x + 5, y - 8, 1, 1);
+            ctx.fillRect(x + 11, y - 5, 1, 1);
+        } else {
+            // Надгробие.
+            ctx.fillStyle = '#4a4650';
+            ctx.fillRect(x + 4, y - 12, 9, 12);
+            ctx.fillRect(x + 5, y - 14, 7, 2);
+            ctx.fillStyle = '#2a2630';
+            ctx.fillRect(x + 8, y - 11, 1, 6);
+            ctx.fillRect(x + 6, y - 9, 5, 1);
+        }
+    }
+
+    castleProp(kind, x, y, time) {
+        const { ctx } = this;
+        if (kind === 0) {
+            // Истрёпанное знамя на древке.
+            ctx.fillStyle = '#3a3c48';
+            ctx.fillRect(x + 6, y - 54, 2, 54);
+            ctx.fillStyle = '#6b1f2a';
+            ctx.fillRect(x + 8, y - 52, 13, 20);
+            ctx.fillRect(x + 8, y - 32, 4, 5);
+            ctx.fillRect(x + 15, y - 32, 4, 3);
+            ctx.fillStyle = '#b0842a';
+            ctx.fillRect(x + 8, y - 52, 13, 2);
+            ctx.fillRect(x + 13, y - 46, 3, 3);
+        } else if (kind === 1) {
+            // Обломок колонны.
+            ctx.fillStyle = '#42455180';
+            ctx.fillStyle = '#424551';
+            ctx.fillRect(x + 2, y - 24, 13, 24);
+            ctx.fillRect(x, y - 28, 17, 4);
+            ctx.fillStyle = '#2c2e3a';
+            ctx.fillRect(x + 6, y - 20, 1, 9);
+            ctx.fillRect(x + 7, y - 12, 4, 1);
+        } else {
+            // Стрельчатое окно, в котором ещё горит свет.
+            ctx.fillStyle = '#20212c';
+            ctx.fillRect(x + 1, y - 50, 14, 24);
+            ctx.fillRect(x + 4, y - 53, 8, 3);
+            ctx.fillStyle = `rgba(242, 193, 78, ${0.5 + 0.08 * Math.sin(time * 5 + x)})`;
+            ctx.fillRect(x + 3, y - 48, 10, 20);
+            ctx.fillStyle = '#20212c';
+            ctx.fillRect(x + 7, y - 48, 2, 20);
+            ctx.fillRect(x + 3, y - 39, 10, 2);
+            this.light(x + 8, y - 38, 44, 0.6);
+        }
+    }
+
+    dungeonProp(kind, x, y, time) {
+        const { ctx } = this;
+        if (kind === 0) {
+            // Сталагмит.
+            ctx.fillStyle = '#3a1816';
+            ctx.fillRect(x + 2, y - 8, 12, 8);
+            ctx.fillRect(x + 4, y - 16, 8, 8);
+            ctx.fillRect(x + 6, y - 23, 4, 7);
+        } else if (kind === 1) {
+            // Цепь с клеткой.
+            ctx.fillStyle = '#4a4650';
+            for (let link = 0; link < 9; link++) ctx.fillRect(x + 7, y - 96 + link * 6, 2, 4);
+            ctx.fillRect(x + 2, y - 44, 12, 2);
+            ctx.fillRect(x + 2, y - 28, 12, 2);
+            for (const bar of [2, 5, 8, 11, 13]) ctx.fillRect(x + bar, y - 44, 1, 18);
+        } else {
+            // Тлеющий кристалл.
+            const pulse = 0.75 + 0.2 * Math.sin(time * 3 + x);
+            ctx.fillStyle = '#8a2a1a';
+            ctx.fillRect(x + 4, y - 9, 8, 9);
+            ctx.fillStyle = '#e2572b';
+            ctx.fillRect(x + 5, y - 14, 5, 12);
+            ctx.fillStyle = '#ffd75e';
+            ctx.fillRect(x + 7, y - 12, 1, 7);
+            this.glow(x + 8, y - 8, 22, '#f28a2e', 0.3 * pulse);
+            this.light(x + 8, y - 8, 44, 0.7 * pulse);
         }
     }
 
@@ -548,7 +776,10 @@ export class Renderer {
             ctx.fillStyle = (i + col * 4 + shift) % 3 === 0 ? '#ffd75e' : '#f28a2e';
             ctx.fillRect(x + i * 4, y + 3 + ((i + col + shift) % 2), 4, 2);
         }
-        if (col % 2 === 0) this.glow(x + TILE, y + 4, 34, '#f28a2e', 0.14 + 0.03 * Math.sin(time * 3 + col));
+        if (col % 2 === 0) {
+            this.glow(x + TILE, y + 4, 34, '#f28a2e', 0.14 + 0.03 * Math.sin(time * 3 + col));
+            this.light(x + TILE, y + 2, 62, 0.85);
+        }
     }
 
     // Костёр: горящий — с пляшущим пламенем, светом и искрами; потухший — только поленья.
@@ -675,6 +906,27 @@ export class Renderer {
         this.ctx.fillRect(x + 1, y + body.h - 1, body.w - 2, 2);
     }
 
+    // Поза: рисует картинку, повернув и растянув её вокруг точки опоры (ступней).
+    //   angle — наклон в радианах; stretch — растяжение по высоте (ширина сжимается в ответ).
+    posed(footX, footY, angle, stretch, alpha, drawBody) {
+        const { ctx } = this;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(footX, footY);
+        ctx.rotate(angle);
+        ctx.scale(1 - stretch * 0.6, 1 + stretch);
+        ctx.translate(-footX, -footY);
+        drawBody();
+        ctx.restore();
+    }
+
+    // Угол оружия врага: занесено при замахе, опущено при ударе.
+    foeWeaponAngle(enemy) {
+        if (enemy.phase === 'windup' || enemy.state === 'windup') return -1.5;
+        if (enemy.phase === 'strike' || enemy.state === 'dash') return 1.1;
+        return 0;
+    }
+
     drawEnemies(enemies) {
         const { ctx } = this;
         for (const enemy of enemies) {
@@ -699,9 +951,16 @@ export class Renderer {
             const sh = sprite.height * scale;
             const sx = this.snap(at.x + enemy.w / 2 - sw / 2);
             const sy = this.snap(at.y + enemy.h - sh);
-            ctx.drawImage(sprite, sx, sy, sw, sh);
 
-            if (def.weapon) this.drawHeld(def.weapon, sx, sy, sprite.width, right, scale);
+            // Живость: слизень пульсирует, получивший удар враг сплющивается, страж «дышит».
+            let stretch = 0;
+            if (enemy.stun > 0 && !def.boss) stretch = -0.14;
+            else if (enemy.type === 'slime') stretch = Math.sin(enemy.animTime * 8) * 0.07;
+            else if (def.boss) stretch = Math.sin(enemy.animTime * 2) * 0.015;
+            this.posed(sx + sw / 2, sy + sh, 0, stretch, 1, () => {
+                ctx.drawImage(sprite, sx, sy, sw, sh);
+                if (def.weapon) this.drawHeld(def.weapon, sx, sy, sprite.width, right, scale, this.foeWeaponAngle(enemy));
+            });
 
             // Замороженный враг покрыт инеем.
             if (enemy.frozen > 0) {
@@ -735,18 +994,26 @@ export class Renderer {
     }
 
     // Оружие в руке фигуры. sx, sy — левый верхний угол спрайта фигуры.
-    drawHeld(name, sx, sy, figureWidth, right, scale = 1) {
-        const weapon = right ? this.sprites[name] : this.flipped[name];
+    // Оружие поворачивается вокруг кисти: angle < 0 — занесено назад, angle > 0 — опущено вперёд;
+    // push — выдвинуто вперёд (выпад копьём).
+    drawHeld(name, sx, sy, figureWidth, right, scale = 1, angle = 0, push = 0) {
+        const { ctx } = this;
+        const weapon = this.sprites[name];
         const hold = HOLD[name];
-        const x = right ? hold.x : figureWidth - hold.x - weapon.width;
-        this.ctx.drawImage(
-            weapon, sx + x * scale, sy + hold.y * scale,
+        ctx.save();
+        ctx.translate(sx + (right ? HAND.x : figureWidth - HAND.x) * scale, sy + HAND.y * scale);
+        ctx.scale(right ? 1 : -1, 1);   // для взгляда влево оружие отражается
+        ctx.translate(push, 0);
+        ctx.rotate(angle);
+        ctx.drawImage(
+            weapon, (hold.x - HAND.x) * scale, (hold.y - HAND.y) * scale,
             weapon.width * scale, weapon.height * scale
         );
+        ctx.restore();
     }
 
     // Фигура героя с оружием. bob = 1 — «вдох»: верх тела на пиксель ниже.
-    drawFigure(sprite, sx, sy, right, weaponName, scale = 1, bob = 0) {
+    drawFigure(sprite, sx, sy, right, weaponName, scale = 1, bob = 0, angle = 0, push = 0) {
         const { ctx } = this;
         if (bob) {
             ctx.drawImage(sprite, 0, 0, 16, 18, sx, sy + 1, 16, 18);
@@ -754,7 +1021,7 @@ export class Renderer {
         } else {
             ctx.drawImage(sprite, sx, sy);
         }
-        if (weaponName) this.drawHeld(weaponName, sx, sy + bob, sprite.width, right, scale);
+        if (weaponName) this.drawHeld(weaponName, sx, sy + bob, sprite.width, right, scale, angle, push);
     }
 
     drawEffects(effects) {
@@ -800,6 +1067,22 @@ export class Renderer {
                 // След удара скелета.
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(effect.x, effect.y + effect.h / 2 - 2, effect.w, 4);
+            } else if (effect.kind === 'corpse') {
+                // Поверженный враг: отлетает, заваливается и тает. Страж ещё и вспыхивает.
+                const def = ENEMIES[effect.type];
+                const scale = def.scale ?? 1;
+                const frame = def.idle ?? def.frames[0];
+                const flash = effect.boss && Math.floor(effect.ttl * 14) % 2 === 0;
+                const side = (effect.facing === 1 ? 'right' : 'left') + (flash ? 'White' : '');
+                const sprite = this.foes[effect.type][frame][side];
+                const sw = sprite.width * scale;
+                const sh = sprite.height * scale;
+                const sx = effect.x + effect.w / 2 - sw / 2;
+                const sy = effect.y + effect.h - sh;
+                const lean = effect.boss ? 0 : -effect.facing * progress * 1.5;
+                this.posed(sx + sw / 2, sy + sh, lean, effect.boss ? -progress * 0.3 : 0, 1 - progress, () => {
+                    ctx.drawImage(sprite, sx, sy, sw, sh);
+                });
             } else if (effect.kind === 'particle') {
                 ctx.fillStyle = effect.color;
                 ctx.fillRect(Math.round(effect.x), Math.round(effect.y), 2, 2);
@@ -851,36 +1134,64 @@ export class Renderer {
         ctx.globalAlpha = 1;
     }
 
-    drawPlayer(player) {
-        // Мигание во время неуязвимости (но не во время рывка — он должен быть виден).
-        const blinking = player.invuln > 0 && player.dashTime <= 0;
+    drawPlayer(player, game) {
+        // Гибель: герой заваливается назад и тает. Мигание при неуязвимости — только у живого
+        // (и не во время рывка — он должен быть виден).
+        const dying = player.dead ? 1 - Math.max(0, game.dying) / DEATH_TIME : 0;
+        const blinking = !player.dead && player.invuln > 0 && player.dashTime <= 0;
         if (blinking && Math.floor(player.invuln * 20) % 2 === 0) return;
 
         const { weapon } = player;
-        const attacking = player.attackTime > 0;
+        const attacking = !player.dead && player.attackTime > 0;
         let frame = 'idle';
-        if (attacking) frame = 'attack';
+        if (player.dead) frame = 'fall';
+        else if (attacking) frame = 'attack';
         else if (player.state === 'jump') frame = player.vy < 0 ? 'jump' : 'fall';
         else if (player.state === 'dash') frame = 'run1';
         else if (player.state === 'run') frame = RUN_CYCLE[Math.floor(player.animTime * 10) % RUN_CYCLE.length];
 
         const right = player.facing === 1;
+        const dir = right ? 1 : -1;
         const at = this.pos(player);
-        if (player.onGround) this.drawShadow(at.x, at.y, player);
-        const sprite = this.heroes[player.classDef.id][frame][right ? 'right' : 'left'];
+        if (player.onGround && !player.dead) this.drawShadow(at.x, at.y, player);
+        const white = player.hurtTime > 0.15;   // короткая белая вспышка в момент ранения
+        const sprite = this.heroes[player.classDef.id][frame][(right ? 'right' : 'left') + (white ? 'White' : '')];
         // Спрайт шире и выше хитбокса: стоит на его нижнем крае, по центру.
         const sx = this.snap(at.x + player.w / 2 - sprite.width / 2);
         const sy = this.snap(at.y + player.h - sprite.height);
 
-        // Удар ближнего боя: вместо оружия в руке рисуется след взмаха или выпада.
-        const swing = attacking && weapon.attack.type === 'melee' ? weapon.attack.swing : null;
-        const breathing = frame === 'idle' && Math.floor(player.animTime * 2) % 2 === 1;
-        this.drawFigure(sprite, sx, sy, right, swing ? null : weapon.sprite, 1, breathing ? 1 : 0);
-        if (swing) {
-            const trace = right ? this.sprites[swing] : this.flipped[swing];
-            const offset = SWING[swing];
-            const x = right ? offset.x : sprite.width - offset.x - trace.width;
-            this.ctx.drawImage(trace, sx + x, sy + offset.y);
+        // Взмах: оружие проходит дугу от занесённого положения до опущенного.
+        // Выпад копьём: древко ложится горизонтально и выдвигается вперёд.
+        const { attack } = weapon;
+        const progress = attacking ? 1 - player.attackTime / (attack.duration ?? 0.15) : 0;
+        let angle = 0;
+        let push = 0;
+        if (attacking && attack.type === 'melee') {
+            if (attack.swing === 'thrust') {
+                angle = Math.PI / 2;
+                push = 2 + progress * 7;
+            } else {
+                angle = -1.9 + progress * 3.1;
+            }
+        } else if (attacking) {
+            angle = 0.35;   // выстрел: оружие чуть подаётся вперёд
         }
+
+        // Поза: наклон назад при ранении, падение при гибели, растяжение при прыжке.
+        let lean = 0;
+        if (player.dead) lean = -dir * 1.5 * Math.min(1, dying * 1.6);
+        else if (player.hurtTime > 0) lean = -dir * 0.22;
+        const breathing = frame === 'idle' && Math.floor(player.animTime * 2) % 2 === 1;
+        this.posed(sx + sprite.width / 2, sy + sprite.height, lean, player.squash, 1 - dying * 0.85, () => {
+            this.drawFigure(sprite, sx, sy, right, weapon.sprite, 1, breathing ? 1 : 0, angle, push);
+            // След взмаха или выпада поверх оружия.
+            if (attacking && attack.type === 'melee') {
+                const trace = right ? this.sprites[attack.swing] : this.flipped[attack.swing];
+                const offset = SWING[attack.swing];
+                const x = right ? offset.x : sprite.width - offset.x - trace.width;
+                this.ctx.globalAlpha = 0.35 + 0.65 * progress;
+                this.ctx.drawImage(trace, sx + x, sy + offset.y);
+            }
+        });
     }
 }
