@@ -16,11 +16,13 @@ import {
     HAZARD_DAMAGE, HAZARD_INSET, INVULN_TIME, COIN_VALUE, CAMERA_LERP, NOTICE_TIME,
     TILE, MAX_SUMMONED, PILLAR_PERIOD, PILLAR_DAMAGE,
     DEATH_TIME, INTRO_TIME, BANNER_TIME, LORE_TIME, SHAKE_DECAY, HITSTOP, HURT_FLASH,
+    RECOIL_TIME, HEART_CHANCE, HEART_HEAL,
 } from './data/constants.js';
 
 // Состояния игры:
 //   menu → classSelect → map ⇄ equipment
 //   map → story → playing ⇄ paused      (story — только пока локация не пройдена)
+//   playing ⇄ loot                      (найден предмет: надеть или убрать в сумку)
 //   playing → complete | dead → map
 //   playing → victory → map             (первая победа над последним боссом)
 export class Game {
@@ -60,6 +62,8 @@ export class Game {
         this.pillars = [];          // огненные столбы уровня, срабатывают по таймеру
         this.effects = [];          // короткие вспышки для отрисовки (взрыв мага)
         this.notice = null;         // всплывающая надпись: { text, color, ttl }
+        this.found = null;          // найденный предмет, ждущий решения: { item, index }
+        this.alpha = 1;             // доля шага между кадрами — для плавной отрисовки
         this.lore = null;           // записка у костра: { text, ttl }
         this.banner = null;         // объявление о боссе: { title, text, ttl }
         this.trail = [];            // след рывка: прошлые положения героя
@@ -260,6 +264,8 @@ export class Game {
         }));
         this.effects = [];
         this.notice = null;
+        this.found = null;
+        this.alpha = 1;
         this.lore = null;
         this.banner = null;
         this.trail = [];
@@ -339,12 +345,18 @@ export class Game {
             this.input.endStep();
         }
 
+        // Отрисовка плавно ведёт объекты от прошлого шага к текущему:
+        // alpha — какая часть следующего шага уже «прошла» к моменту кадра.
+        const moving = this.state === 'playing' && this.freeze <= 0;
+        this.alpha = moving ? this.accumulator / STEP : 1;
+
         this.flushEvents();
         if (this.renderer && this.level) this.renderer.draw(this);
     }
 
     update(dt) {
         const { player, level } = this;
+        this.remember();
         this.time += dt;
         this.intro = Math.max(0, this.intro - dt);
         this.shake = Math.max(0, this.shake - SHAKE_DECAY * dt);
@@ -373,6 +385,8 @@ export class Game {
         this.updateEnemyShots(dt);
         this.updateDrops(dt);
         this.updateEffects(dt);
+        // Найден предмет — игра ждёт решения игрока, остаток шага не нужен.
+        if (this.state !== 'playing') return;
 
         for (const coin of this.coins) {
             if (coin.taken || !overlaps(player, coin)) continue;
@@ -414,6 +428,16 @@ export class Game {
 
         if (player.dead) this.startDying();
         else if (!this.bossAlive && overlaps(player, level.exit)) this.finishLevel();
+    }
+
+    // Запоминает положения перед шагом: отрисовка сглаживает движение между шагами.
+    remember() {
+        const bodies = [this.player, ...this.enemies, ...this.projectiles, ...this.enemyShots, ...this.drops];
+        for (const body of bodies) {
+            body.prevX = body.x;
+            body.prevY = body.y;
+        }
+        this.camera.prevX = this.camera.x;
     }
 
     // Отклик мира на действия героя: пыль, след рывка, тряска.
@@ -541,7 +565,7 @@ export class Game {
         for (const enemy of this.enemies) {
             if (enemy.dead || !overlaps(projectile, enemy)) continue;
             const hit = this.hitEnemy(
-                enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit, projectile.stun
+                enemy, projectile.damage, projectile.id, projectile.dir, projectile.crit, projectile.stun, false
             );
             if (hit && !projectile.pierce) {
                 projectile.dead = true;
@@ -568,7 +592,11 @@ export class Game {
                 this.addShake(4);
             }
             // Оглушённый враг не ранит — у ближнего боя есть окно для удара.
-            if (enemy.stun <= 0 && overlaps(player, enemy)) this.hurtPlayer(enemy.damage);
+            // Ранив героя, обычный враг отскакивает, а не остаётся вплотную.
+            if (enemy.stun <= 0 && overlaps(player, enemy) && this.hurtPlayer(enemy.damage) && !enemy.def.boss) {
+                const away = enemy.x + enemy.w / 2 < player.x + player.w / 2 ? -1 : 1;
+                enemy.recoil(away, RECOIL_TIME);
+            }
         }
         this.enemies = this.enemies
             .filter((enemy) => !enemy.dead && enemy.y <= level.height)
@@ -659,34 +687,75 @@ export class Game {
             boss: enemy.def.boss === true,
         });
         if (item) this.drops.push(new LootDrop(x, y, -dir, { item }));
+        // Иногда из врага выпадает сердце.
+        if (this.rng() < HEART_CHANCE) this.drops.push(new LootDrop(x, y, 0, { heal: HEART_HEAL }));
     }
 
     updateDrops(dt) {
         for (const drop of this.drops) {
             drop.update(dt, this.level);
             if (!drop.ready || drop.dead || !overlaps(this.player, drop)) continue;
+            // Сердце ждёт, пока герой ранен; второй предмет — пока не решена судьба первого.
+            if (drop.kind === 'heart' && this.player.hp >= this.player.maxHp) continue;
+            if (drop.kind === 'item' && this.found) continue;
             drop.dead = true;
-            this.burst(drop.x + 4, drop.y + 4, drop.kind === 'gold' ? '#ffe27a' : rarityOf(drop.item).color, 4);
             if (drop.kind === 'gold') {
                 this.gold += drop.value;
                 this.emit('coin');
+                this.burst(drop.x + 4, drop.y + 4, '#ffe27a', 4);
+            } else if (drop.kind === 'heart') {
+                this.player.hp = Math.min(this.player.maxHp, this.player.hp + drop.heal);
+                this.emit('heal');
+                this.burst(drop.x + 4, drop.y + 4, '#e2572b', 6);
             } else {
+                this.burst(drop.x + 4, drop.y + 4, rarityOf(drop.item).color, 6);
                 this.collectItem(drop.item);
-                this.emit('item');
             }
         }
         this.drops = this.drops.filter((drop) => !drop.dead);
     }
 
-    // Предмет идёт в сумку; если места нет — сразу разбирается в золото.
+    // Найден предмет: он кладётся в сумку, игра встаёт на паузу и спрашивает,
+    // надеть ли его сразу. index = null — сумка полна, предмет ещё не в ней.
     collectItem(item) {
-        if (this.profile.inventory.add(item)) {
-            this.notice = { text: item.name, color: rarityOf(item).color, ttl: NOTICE_TIME };
-            return;
+        const { inventory } = this.profile;
+        const index = inventory.add(item) ? inventory.items.length - 1 : null;
+        this.found = { item, index };
+        this.emit('item');
+        this.setState('loot');
+    }
+
+    // Решение по найденному предмету. equip = true — надеть сейчас.
+    // Если сумка полна: надетый прежде предмет (или сама находка) разбирается в золото.
+    takeFound(equip) {
+        if (!this.found) return;
+        const { item, index } = this.found;
+        const { inventory } = this.profile;
+        let text = equip ? `Надето: ${item.name}` : `В сумку: ${item.name}`;
+        if (index !== null) {
+            if (equip) inventory.equip(index);
+        } else {
+            const scrapped = equip ? inventory.equipped[item.slot] : item;
+            if (equip) inventory.equipped[item.slot] = item;
+            if (scrapped) {
+                const gold = dismantleValue(scrapped);
+                this.gold += gold;
+                text = equip ? `${text}; прежний разобран: +${gold}` : `Сумка полна, разобрано: +${gold} золота`;
+            }
         }
-        const gold = dismantleValue(item);
-        this.gold += gold;
-        this.notice = { text: `Сумка полна: +${gold} золота`, color: '#b9ad98', ttl: NOTICE_TIME };
+        if (equip) this.applyGear();
+        this.found = null;
+        this.notice = { text, color: rarityOf(item).color, ttl: NOTICE_TIME };
+        this.persist();
+        this.last = null;
+        this.setState('playing');
+    }
+
+    // Пересчитывает бонусы и оружие героя по надетому снаряжению.
+    applyGear() {
+        const { inventory, classId } = this.profile;
+        const weapon = WEAPONS[inventory.equipped.weapon?.kind] ?? WEAPONS[CLASSES[classId].starter];
+        this.player.setGear(inventory.totals(), weapon);
     }
 
     // Цепная молния: бьёт ближайших врагов в радиусе, перескакивая от одного к другому.
@@ -707,10 +776,11 @@ export class Game {
     }
 
     // Попадание по врагу: звук и всплывающее число урона.
-    hitEnemy(enemy, damage, id, dir, crit = false, freeze = 0) {
+    // impact — удар ближнего боя или по площади: от него кадр на миг замирает.
+    hitEnemy(enemy, damage, id, dir, crit = false, freeze = 0, impact = true) {
         if (!enemy.hit(damage, id, dir, freeze)) return false;
         this.emit('hit');
-        this.freeze = Math.max(this.freeze, HITSTOP);
+        if (impact) this.freeze = Math.max(this.freeze, HITSTOP);
         if (crit) this.addShake(2);
         this.effects.push({
             kind: 'number', text: String(Math.round(damage)), crit,
@@ -719,8 +789,11 @@ export class Game {
         return true;
     }
 
+    // Возвращает true, если урон прошёл (герой не был неуязвим).
     hurtPlayer(amount) {
-        if (this.player.hurt(amount)) this.feelHurt();
+        if (!this.player.hurt(amount)) return false;
+        this.feelHurt();
+        return true;
     }
 
     // Россыпь частиц. Направления заданы по кругу, без случайности —

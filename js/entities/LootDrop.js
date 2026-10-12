@@ -4,13 +4,16 @@ import { GRAVITY, MAX_FALL } from '../data/constants.js';
 const PICKUP_DELAY = 0.35;  // добычу нельзя подобрать, пока она вылетает из врага
 
 // Добыча, выпавшая из врага: подпрыгивает, падает и ждёт героя.
-// Бывает двух видов: золото ({ value }) и предмет ({ item }).
+// Бывает трёх видов: золото ({ value }), предмет ({ item }) и сердце ({ heal }).
 export class LootDrop {
     // x, y — центр точки, откуда выпадает; dir — в какую сторону отлетает.
-    constructor(x, y, dir, { value = 0, item = null }) {
-        this.kind = item ? 'item' : 'gold';
+    constructor(x, y, dir, { value = 0, item = null, heal = 0 }) {
+        this.kind = 'gold';
+        if (item) this.kind = 'item';
+        else if (heal > 0) this.kind = 'heart';
         this.value = value;
         this.item = item;
+        this.heal = heal;
         this.w = 8;
         this.h = 8;
         this.x = x - this.w / 2;

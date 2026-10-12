@@ -98,6 +98,8 @@ export class Renderer {
     constructor(canvas, overlay = null) {
         this.canvas = canvas;
         this.overlay = overlay;
+        this.scale = 1;   // во сколько раз увеличено поле (см. resize)
+        this.alpha = 1;   // доля шага логики между кадрами (см. between)
         canvas.width = VIEW_W;
         canvas.height = VIEW_H;
         this.ctx = canvas.getContext('2d');
@@ -184,6 +186,35 @@ export class Renderer {
         stage.style.width = `${VIEW_W * scale}px`;
         stage.style.height = `${VIEW_H * scale}px`;
         stage.style.setProperty('--scale', scale);
+
+        // Холст создаётся в полном разрешении экрана, а рисование масштабируется.
+        // Объекты могут стоять на долях игрового пикселя, поэтому движение
+        // плавное, а сами спрайты остаются чёткими.
+        this.scale = scale;
+        this.canvas.width = VIEW_W * scale;
+        this.canvas.height = VIEW_H * scale;
+        this.ctx.imageSmoothingEnabled = false;
+    }
+
+    // Округление до пикселя экрана (а не до игрового пикселя).
+    snap(value) {
+        return Math.round(value * this.scale) / this.scale;
+    }
+
+    // Значение между прошлым и текущим шагом логики. Логика идёт 60 раз в секунду,
+    // а кадры могут рисоваться чаще или не в такт — без этого движение дёргается.
+    // Большой скачок (перенос к костру) не сглаживается.
+    between(previous, current) {
+        if (previous === undefined || Math.abs(current - previous) > 24) return current;
+        return previous + (current - previous) * this.alpha;
+    }
+
+    // Сглаженное положение объекта на экране.
+    pos(body) {
+        return {
+            x: this.snap(this.between(body.prevX, body.x)),
+            y: this.snap(this.between(body.prevY, body.y)),
+        };
     }
 
     tilesFor(levelDef) {
@@ -205,9 +236,11 @@ export class Renderer {
         const { theme } = game.levelDef;
         const { player, time } = game;
         // Тряска: камера дрожит на несколько пикселей и быстро успокаивается.
+        ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+        this.alpha = game.alpha;
         const shakeX = Math.round(Math.sin(time * 93) * game.shake);
         const shakeY = Math.round(Math.cos(time * 71) * game.shake);
-        const camX = Math.round(game.camera.x) + shakeX;
+        const camX = this.snap(this.between(game.camera.prevX, game.camera.x)) + shakeX;
         const camY = Math.round(game.camera.y) + shakeY;
 
         this.drawScene(theme, time, camX);
@@ -258,6 +291,7 @@ export class Renderer {
         const { theme } = levelDef;
         const tiles = this.tilesFor(levelDef);
         const ground = VIEW_H - 44;
+        ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
 
         this.drawScene(theme, time, 0);
         for (let x = 0; x < VIEW_W; x += TILE) {
@@ -364,7 +398,7 @@ export class Renderer {
         const first = Math.floor(offset / SILHOUETTE_GAP);
         for (let i = first - 1; i <= first + VIEW_W / SILHOUETTE_GAP + 1; i++) {
             const height = Math.round(SILHOUETTES[wrap(i, SILHOUETTES.length)] * k);
-            const x = Math.round(i * SILHOUETTE_GAP - offset);
+            const x = this.snap(i * SILHOUETTE_GAP - offset);
             ctx.fillStyle = color;
             if (!columns) {
                 const trunk = Math.round(height * 0.4);
@@ -573,10 +607,15 @@ export class Renderer {
             }
         }
         for (const drop of game.drops) {
-            const x = Math.round(drop.x);
-            const y = Math.round(drop.y);
+            const { x, y } = this.pos(drop);
             if (drop.kind === 'gold') {
                 ctx.drawImage(sprites.coin, x, y);
+                continue;
+            }
+            if (drop.kind === 'heart') {
+                // Сердце слегка покачивается и светится.
+                this.glow(x + 4, y + 4, 14, '#e2572b', 0.35);
+                ctx.drawImage(sprites.heart, x, y + 1 + Math.round(Math.sin(time * 5) * 1));
                 continue;
             }
             // Предмет: мешочек в мерцающей рамке и свечении цвета редкости.
@@ -630,10 +669,10 @@ export class Renderer {
         }
     }
 
-    // Тень под стоящим на земле.
-    drawShadow(body) {
+    // Тень под стоящим на земле. x, y — сглаженное положение тела.
+    drawShadow(x, y, body) {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-        this.ctx.fillRect(Math.round(body.x) + 1, Math.round(body.y + body.h) - 1, body.w - 2, 2);
+        this.ctx.fillRect(x + 1, y + body.h - 1, body.w - 2, 2);
     }
 
     drawEnemies(enemies) {
@@ -646,7 +685,8 @@ export class Renderer {
                 ? def.frames[Math.floor(enemy.animTime * 6) % def.frames.length]
                 : def.idle ?? def.frames[0];
             const right = enemy.facing === 1;
-            if (enemy.onGround) this.drawShadow(enemy);
+            const at = this.pos(enemy);
+            if (enemy.onGround) this.drawShadow(at.x, at.y, enemy);
 
             // Белым: вспышка при попадании и мигание во время замаха перед ударом.
             const windup = enemy.phase === 'windup' || enemy.state === 'windup';
@@ -657,8 +697,8 @@ export class Renderer {
             // Спрайт стоит на нижнем крае хитбокса, по центру.
             const sw = sprite.width * scale;
             const sh = sprite.height * scale;
-            const sx = Math.round(enemy.x + enemy.w / 2 - sw / 2);
-            const sy = Math.round(enemy.y + enemy.h - sh);
+            const sx = this.snap(at.x + enemy.w / 2 - sw / 2);
+            const sy = this.snap(at.y + enemy.h - sh);
             ctx.drawImage(sprite, sx, sy, sw, sh);
 
             if (def.weapon) this.drawHeld(def.weapon, sx, sy, sprite.width, right, scale);
@@ -674,8 +714,7 @@ export class Renderer {
 
             // Полоска здоровья над раненым врагом. У босса она в HUD.
             if (!def.boss && enemy.hp < enemy.maxHp) {
-                const x = Math.round(enemy.x);
-                const y = Math.round(enemy.y);
+                const { x, y } = at;
                 ctx.fillStyle = '#1a1423';
                 ctx.fillRect(x - 1, y - 5, enemy.w + 2, 3);
                 ctx.fillStyle = '#e2572b';
@@ -689,8 +728,9 @@ export class Renderer {
         for (const shot of shots) {
             const set = shot.dir === 1 ? this.sprites : this.flipped;
             const glow = SHOT_GLOW[shot.sprite];
-            if (glow) this.glow(shot.x + shot.w / 2, shot.y + shot.h / 2, 14, glow, 0.5);
-            this.ctx.drawImage(set[shot.sprite], Math.round(shot.x), Math.round(shot.y));
+            const { x, y } = this.pos(shot);
+            if (glow) this.glow(x + shot.w / 2, y + shot.h / 2, 14, glow, 0.5);
+            this.ctx.drawImage(set[shot.sprite], x, y);
         }
     }
 
@@ -825,11 +865,12 @@ export class Renderer {
         else if (player.state === 'run') frame = RUN_CYCLE[Math.floor(player.animTime * 10) % RUN_CYCLE.length];
 
         const right = player.facing === 1;
-        if (player.onGround) this.drawShadow(player);
+        const at = this.pos(player);
+        if (player.onGround) this.drawShadow(at.x, at.y, player);
         const sprite = this.heroes[player.classDef.id][frame][right ? 'right' : 'left'];
         // Спрайт шире и выше хитбокса: стоит на его нижнем крае, по центру.
-        const sx = Math.round(player.x + player.w / 2 - sprite.width / 2);
-        const sy = Math.round(player.y + player.h - sprite.height);
+        const sx = this.snap(at.x + player.w / 2 - sprite.width / 2);
+        const sy = this.snap(at.y + player.h - sprite.height);
 
         // Удар ближнего боя: вместо оружия в руке рисуется след взмаха или выпада.
         const swing = attacking && weapon.attack.type === 'melee' ? weapon.attack.swing : null;

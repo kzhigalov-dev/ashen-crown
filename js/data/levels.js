@@ -46,6 +46,15 @@ const FOREST = {
         '.........s....###...',
         G, G,
     ],
+    // Яма без врагов — для первого уровня.
+    gap: [
+        E, E, E, E, E, E, E, E, E, E, E, E,
+        '........ooo.........',
+        E,
+        E,
+        '########...#########',
+        '########...#########',
+    ],
     pit: [
         E, E, E, E, E, E, E, E, E, E, E, E,
         '........ooo.........',
@@ -332,7 +341,7 @@ export const WORLDS = [
             backdrop: 'trees', moon: '#d9e4d2', fog: '#8fb0b0', particles: 'ash', tiles: null,
         },
         levels: [
-            { name: 'Опушка', parts: ['start', 'meadow', 'pit', 'camp', 'ruins', 'exit'] },
+            { name: 'Опушка', parts: ['start', 'gap', 'camp', 'meadow', 'ruins', 'exit'] },
             { name: 'Волчья тропа', parts: ['start', 'wolfRun', 'platforms', 'spikes', 'doublePit', 'thorns', 'exit'] },
             { name: 'Овраг', parts: ['start', 'pit', 'stairs', 'chasm', 'descent', 'wolfRun', 'exit'] },
             { name: 'Бурелом', parts: ['start', 'thorns', 'ruins', 'camp', 'stairs', 'highRoad', 'chasm', 'descent', 'doublePit', 'exit'] },
@@ -382,7 +391,7 @@ export const WORLDS = [
 
 export const LEVELS_PER_WORLD = 5;
 // Насколько враги каждого следующего уровня мира крепче и больнее бьют.
-const POWER_STEP = 0.12;
+const POWER_STEP = 0.08;
 
 // Все уровни игры по порядку прохождения.
 //   world, worldName — мир; number — номер уровня в мире (1…5);

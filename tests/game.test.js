@@ -65,7 +65,7 @@ test('монета даёт золото один раз', () => {
     assert.equal(game.gold, 5);
 });
 
-test('шипы: −20 здоровья и возврат к костру', () => {
+test('шипы: −15 здоровья и возврат к костру', () => {
     const { game } = setup();
     game.player.x = 67;
     game.update(STEP);
@@ -73,7 +73,7 @@ test('шипы: −20 здоровья и возврат к костру', () =>
     game.player.x = 83;
     game.player.y = 36;
     game.update(STEP);
-    assert.equal(game.player.hp, 100);
+    assert.equal(game.player.hp, 105);
     assert.equal(game.player.x, 67);
     assert.equal(game.player.y, 26);
     assert.ok(game.player.invuln > 0);
@@ -107,14 +107,14 @@ test('падение в яму без костра возвращает на с�
     const { game } = setup();
     game.player.y = game.level.height + 5;
     game.update(STEP);
-    assert.equal(game.player.hp, 100);
+    assert.equal(game.player.hp, 105);
     assert.equal(game.player.x, 3);
     assert.equal(game.state, 'playing');
 });
 
 test('здоровье 0 — поражение', () => {
     const { game, input } = setup();
-    game.player.hp = 20;
+    game.player.hp = 10;
     game.player.y = game.level.height + 5;
     game.update(STEP);
     assert.equal(game.state, 'playing', 'сначала пауза с разлетающимися частицами');
@@ -260,8 +260,8 @@ test('один взмах меча ранит врага один раз', () =>
     run(game, input, 2);
     target.dispatch('keyup', { code: 'KeyJ' });
     run(game, input, 15);
-    assert.equal(game.enemies[0].hp, 16);
-    assert.equal(game.enemies[1].hp, 30, 'дальний враг не задет');
+    assert.equal(game.enemies[0].hp, 10);
+    assert.equal(game.enemies[1].hp, 24, 'дальний враг не задет');
 });
 
 test('мечник убивает врага, выпадает золото, подбор увеличивает счёт', () => {
@@ -291,7 +291,7 @@ test('касание врага ранит героя, оглушённый вр
     const { game, input } = arena();
     game.player.x = 66;
     run(game, input, 1);
-    assert.equal(game.player.hp, 110);
+    assert.equal(game.player.hp, 114);
 
     const second = arena();
     second.game.player.x = 66;
@@ -308,16 +308,15 @@ test('стрела лучника ранит врага и исчезает', ()
     assert.equal(game.projectiles.length, 1);
     run(game, input, 40, () => game.projectiles.length === 0);
     assert.equal(game.projectiles.length, 0);
-    assert.equal(game.enemies[0].hp, 20);
-    assert.equal(game.enemies[1].hp, 30);
+    assert.equal(game.enemies[0].hp, 14);
+    assert.equal(game.enemies[1].hp, 24);
 });
 
 test('пробивающая стрела ранит всех на пути', () => {
     const { game, input, target } = arena('archer');
     target.dispatch('keydown', { code: 'KeyK' });
     run(game, input, 40);
-    assert.equal(game.enemies[0].hp, 6);
-    assert.equal(game.enemies[1].hp, 6);
+    assert.equal(game.enemies.length, 0, 'оба слизня (24 здоровья) пробиты одной стрелой на 24');
 });
 
 test('шар мага попадает в низкого врага', () => {
@@ -326,7 +325,7 @@ test('шар мага попадает в низкого врага', () => {
     run(game, input, 1);
     target.dispatch('keyup', { code: 'KeyJ' });
     run(game, input, 40);
-    assert.equal(game.enemies[0].hp, 14);
+    assert.equal(game.enemies[0].hp, 8);
 });
 
 test('взрыв мага бьёт врагов вокруг и оставляет вспышку', () => {
@@ -335,7 +334,7 @@ test('взрыв мага бьёт врагов вокруг и оставляе
     game.player.invuln = 5;
     target.dispatch('keydown', { code: 'KeyK' });
     run(game, input, 1);
-    assert.equal(game.enemies.length, 0, 'оба слизня (30 здоровья) убиты взрывом на 30');
+    assert.equal(game.enemies.length, 0, 'оба слизня убиты взрывом на 30');
     const blasts = () => game.effects.filter((effect) => effect.kind === 'blast');
     assert.equal(blasts().length, 1);
     run(game, input, 20);
@@ -425,10 +424,28 @@ test('карта ⇄ снаряжение ⇄ уровень', () => {
     assert.equal(game.level, null);
 });
 
-test('с врага падает предмет, подбор кладёт его в сумку', () => {
-    // По порядку: золото (3), сторона (вправо), шанс предмета (0.1 < 0.15),
-    // редкость (обычный), слот (оружие), вид (посох огня).
-    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0, 0));
+// Подбирает всё выпавшее; на каждую находку отвечает decide(found) → надеть или нет.
+function lootAll(game, input, decide = () => false) {
+    for (let i = 0; i < 600 && (game.drops.length > 0 || game.state === 'loot'); i++) {
+        if (game.state === 'loot') {
+            game.takeFound(decide(game.found));
+            continue;
+        }
+        game.player.x = game.drops[0].x;
+        game.update(STEP);
+        input.endStep();
+    }
+}
+
+// Числа по порядку для каждого убитого врага: золото (3), сторона (вправо),
+// шанс предмета (0.1 < 0.15), редкость (обычный), слот (оружие), вид (посох огня),
+// шанс сердца (0.9 — не выпало).
+const ITEM_DROP = [0, 0.9, 0.1, 0, 0, 0, 0.9];
+
+function blastTwoSlimes(extraSetup = () => {}) {
+    const context = saved('mage', seq(...ITEM_DROP));
+    extraSetup(context.game);
+    const { game, input, target } = context;
     game.playLevel(0);
     for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
     game.player.x = 85;
@@ -437,29 +454,135 @@ test('с врага падает предмет, подбор кладёт ег�
     game.update(STEP);
     input.endStep();
     game.update(STEP);
+    return context;
+}
+
+test('с врага падает предмет; находка останавливает игру и ждёт решения', () => {
+    const { game, input } = blastTwoSlimes();
     assert.equal(game.drops.filter((drop) => drop.kind === 'gold').length, 2);
     assert.equal(game.drops.filter((drop) => drop.kind === 'item').length, 2);
-    collectAll(game, input);
-    assert.equal(game.gold, 6);
-    assert.deepEqual(game.profile.inventory.items.map((item) => item.name), ['Обычный посох огня', 'Обычный посох огня']);
-    assert.equal(game.notice.text, 'Обычный посох огня');
+    for (let i = 0; i < 300 && game.state === 'playing'; i++) {
+        game.player.x = game.drops.find((drop) => drop.kind === 'item').x;
+        game.update(STEP);
+        input.endStep();
+    }
+    assert.equal(game.state, 'loot');
+    assert.equal(game.found.item.name, 'Обычный посох огня');
+    assert.equal(game.found.index, 0, 'предмет уже лежит в сумке');
+    assert.ok(game.events.includes('item'));
+    assert.equal(input.capture, false, 'клавиши отданы окну находки');
 });
 
-test('сумка полна: найденный предмет разбирается в золото', () => {
-    const { game, input, target } = saved('mage', seq(0, 0.9, 0.1, 0, 0, 0));
-    for (let i = 0; i < 12; i++) game.profile.inventory.add(armorItem());
+test('пока открыто окно находки, мир стоит', () => {
+    const { game } = blastTwoSlimes();
+    game.collectItem(armorItem());
+    let updates = 0;
+    const update = game.update.bind(game);
+    game.update = (dt) => { updates++; update(dt); };
+    game.tick(0);
+    game.tick(500);
+    game.tick(1000);
+    assert.equal(updates, 0);
+    assert.equal(game.alpha, 1);
+});
+
+test('находку можно убрать в сумку: она остаётся там, игра продолжается', () => {
+    const { game, input } = blastTwoSlimes();
+    lootAll(game, input, () => false);
+    assert.equal(game.state, 'playing');
+    assert.equal(game.gold, 6);
+    assert.deepEqual(game.profile.inventory.items.map((item) => item.name), ['Обычный посох огня', 'Обычный посох огня']);
+    assert.equal(game.profile.inventory.equipped.weapon, null);
+    assert.match(game.notice.text, /В сумку/);
+    assert.equal(game.found, null);
+});
+
+test('находку можно надеть сразу: бонусы и оружие действуют немедленно', () => {
+    const { game, save } = saved('swordsman');
     game.playLevel(0);
-    for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 0 };
-    game.player.x = 85;
-    game.player.invuln = 5;
-    target.dispatch('keydown', { code: 'KeyK' });
-    game.update(STEP);
-    input.endStep();
-    game.update(STEP);
-    collectAll(game, input);
-    assert.equal(game.profile.inventory.items.length, 12);
-    assert.equal(game.gold, 6 + 2 + 2, 'золото врагов и по 2 за каждый обычный предмет');
-    assert.match(game.notice.text, /Сумка полна/);
+    game.player.hp = 60;
+    game.collectItem(armorItem());
+    assert.equal(game.state, 'loot');
+    game.takeFound(true);
+    assert.equal(game.state, 'playing');
+    assert.equal(game.player.maxHp, 140);
+    assert.equal(game.player.hp, 80, 'прибавка брони добавлена к текущему здоровью');
+    assert.equal(game.profile.inventory.items.length, 0);
+    assert.equal(save.load().inventory.equipped.armor.name, 'Редкий доспех');
+    assert.match(game.notice.text, /Надето/);
+
+    game.collectItem(weaponItem('axe', 'swordsman'));
+    game.takeFound(true);
+    assert.equal(game.player.weapon.id, 'axe', 'оружие сменилось посреди уровня');
+    assert.equal(game.player.bonus.damage, 4);
+});
+
+test('надетая находка меняется местами с прежним предметом', () => {
+    const { game } = saved('swordsman');
+    game.playLevel(0);
+    game.collectItem(weaponItem('sword', 'swordsman'));
+    game.takeFound(true);
+    game.collectItem(weaponItem('spear', 'swordsman'));
+    game.takeFound(true);
+    assert.equal(game.profile.inventory.equipped.weapon.kind, 'spear');
+    assert.deepEqual(game.profile.inventory.items.map((item) => item.kind), ['sword']);
+});
+
+test('сумка полна: находку можно надеть (прежний предмет разбирается) или разобрать', () => {
+    const fill = (game) => { for (let i = 0; i < 12; i++) game.profile.inventory.add(armorItem()); };
+    const first = saved('swordsman');
+    fill(first.game);
+    first.game.playLevel(0);
+    first.game.collectItem(weaponItem('axe', 'swordsman'));
+    assert.equal(first.game.found.index, null, 'в сумку не поместился');
+    first.game.takeFound(false);
+    assert.equal(first.game.gold, 2, 'обычный предмет разобран');
+    assert.equal(first.game.profile.inventory.items.length, 12);
+    assert.match(first.game.notice.text, /Сумка полна/);
+
+    const second = saved('swordsman');
+    fill(second.game);
+    second.game.profile.inventory.equip(0);            // надет редкий доспех, в сумке 11
+    second.game.profile.inventory.add(armorItem());    // снова 12
+    second.game.playLevel(0);
+    const better = { ...armorItem(), name: 'Эпический доспех', rarity: 'epic', stats: { hp: 40 } };
+    second.game.collectItem(better);
+    second.game.takeFound(true);
+    assert.equal(second.game.profile.inventory.equipped.armor.name, 'Эпический доспех');
+    assert.equal(second.game.gold, 6, 'прежний редкий доспех разобран');
+    assert.equal(second.game.player.maxHp, 160);
+});
+
+test('второй предмет не подбирается, пока не решена судьба первого', () => {
+    const { game, input } = blastTwoSlimes();
+    game.collectItem(armorItem());
+    const items = () => game.drops.filter((drop) => drop.kind === 'item').length;
+    const before = items();
+    for (let i = 0; i < 60; i++) {
+        game.player.x = game.drops.find((drop) => drop.kind === 'item').x;
+        game.update(STEP);
+        input.endStep();
+    }
+    assert.equal(items(), before);
+    assert.equal(game.found.item.name, 'Редкий доспех');
+});
+
+test('из врага может выпасть сердце: лечит раненого, здорового ждёт', () => {
+    // золото, сторона, шанс предмета (не выпал), шанс сердца (выпало)
+    const { game, input } = arena('swordsman', seq(0, 0.9, 0.5, 0.05));
+    game.enemies[0].hit(999, 'test', 1);
+    run(game, input, 1);
+    const heart = game.drops.find((drop) => drop.kind === 'heart');
+    assert.ok(heart);
+    run(game, input, 40);
+    game.player.x = heart.x;
+    run(game, input, 5);
+    assert.ok(game.drops.includes(heart), 'здоровый герой сердце не тратит');
+    game.player.hp = 50;
+    run(game, input, 5);
+    assert.equal(game.player.hp, 70);
+    assert.ok(!game.drops.includes(heart));
+    assert.ok(game.events.includes('heal'));
 });
 
 test('прохождение: золото забега идёт в общее, рекорд и сохранение', () => {
@@ -502,7 +625,8 @@ test('смерть: золото забега теряется, найденны
     game.playLevel(0);
     game.gold = 40;
     game.collectItem(armorItem());
-    game.player.hp = 20;
+    game.takeFound(false);
+    game.player.hp = 10;
     game.player.y = game.level.height + 5;
     untilOver(game);
     assert.equal(game.state, 'dead');
@@ -583,16 +707,16 @@ function fight(row, classId = 'swordsman', rng = () => 0.5) {
 test('удар скелета ранит героя после замаха', () => {
     const { game, input } = fight('#P.z..............E#');
     game.player.x = 40;
-    run(game, input, 20);
+    run(game, input, 25);
     assert.equal(game.player.hp, 120, 'во время замаха урона нет');
     run(game, input, 15);
-    assert.equal(game.player.hp, 102);
+    assert.equal(game.player.hp, 108);
 });
 
 test('стрела скелета-лучника ранит героя и исчезает', () => {
     const { game, input } = fight('#P.......a........E#');
     run(game, input, 60 * 4, () => game.player.hp < 120);
-    assert.equal(game.player.hp, 110);
+    assert.equal(game.player.hp, 113);
     assert.equal(game.enemyShots.length, 0);
 });
 
@@ -757,7 +881,7 @@ test('гибель врага: звук и частицы; эффекты не �
     run(game, input, 1);
     assert.ok(game.events.includes('kill'));
     assert.equal(game.effects.filter((effect) => effect.kind === 'particle').length, 8);
-    assert.equal(calls, 3, 'только золото, сторона и шанс предмета');
+    assert.equal(calls, 4, 'только золото, сторона, шанс предмета и шанс сердца');
     run(game, input, 40);
     assert.equal(game.effects.length, 0, 'частицы исчезают');
 });
@@ -769,7 +893,7 @@ test('урон герою, поражение и прохождение дают
     assert.ok(game.events.includes('hurt'));
 
     game.events = [];
-    game.player.hp = 20;
+    game.player.hp = 10;
     game.player.y = game.level.height + 5;
     untilOver(game);
     assert.deepEqual(game.events, ['hurt', 'death', 'defeat']);
@@ -1014,12 +1138,10 @@ test('цепная молния бьёт ближайших врагов в ра
     game.player.invuln = 5;
     target.dispatch('keydown', { code: 'KeyK' });
     run(game, input, 1);
-    const hurt = game.enemies.filter((enemy) => enemy.hp < enemy.maxHp);
-    assert.equal(hurt.length, 4, 'не больше четырёх целей');
-    assert.equal(game.enemies.at(-1).hp, 30, 'дальний слизень вне радиуса');
+    // Молния на 26 урона убивает слизня (24 здоровья) — считаем уцелевших.
+    assert.equal(game.enemies.length, 2, 'из шести поражены четверо — не больше');
+    assert.equal(game.enemies.at(-1).hp, 24, 'дальний слизень вне радиуса');
     assert.equal(game.effects.filter((effect) => effect.kind === 'lightning').length, 4);
-    const struckX = hurt.map((enemy) => enemy.x).sort((a, b) => a - b);
-    assert.ok(struckX.at(-1) - struckX[0] <= 120, 'поражены соседние враги');
 });
 
 test('копьё достаёт врага, до которого не дотягивается меч', () => {
@@ -1028,7 +1150,7 @@ test('копьё достаёт врага, до которого не дотя�
         game.player.x = 30;   // слизень в 35 пикселях от середины героя
         target.dispatch('keydown', { code: 'KeyJ' });
         run(game, input, 3);
-        return game.enemies[0].hp < 30;
+        return game.enemies[0].hp < 24;
     };
     assert.equal(reach('sword'), false);
     assert.equal(reach('spear'), true);
@@ -1046,7 +1168,7 @@ test('дождь стрел накрывает землю впереди гер�
     assert.ok(maxY > 20, 'стрелы уходят вверх');
     run(game, input, 90);
     assert.equal(game.projectiles.length, 0, 'все стрелы упали');
-    assert.ok(game.enemies.some((enemy) => enemy.hp < 30), 'хотя бы один враг впереди задет');
+    assert.ok(game.enemies.length < 2 || game.enemies.some((enemy) => enemy.hp < 24), 'хотя бы один враг впереди задет');
     assert.equal(game.player.x, startX);
 });
 
@@ -1059,9 +1181,9 @@ test('сила уровня делает обычных врагов крепч�
     game.startLevel();
     const slime = game.enemies.find((enemy) => enemy.type === 'slime');
     const boss = game.enemies.find((enemy) => enemy.def.boss);
-    assert.equal(slime.maxHp, 45);
-    assert.equal(slime.hp, 45);
-    assert.equal(slime.damage, 15);
+    assert.equal(slime.maxHp, 36);
+    assert.equal(slime.hp, 36);
+    assert.equal(slime.damage, 9);
     assert.equal(boss.maxHp, 260);
 });
 
@@ -1118,5 +1240,58 @@ test('выстрел вплотную попадает во врага, даже
     game.player.x = slime.x + 2;         // герой внутри слизня
     target.dispatch('keydown', { code: 'KeyJ' });
     run(game, input, 3);
-    assert.equal(slime.hp, 20, 'стрела попала, а не разбилась о стену');
+    assert.equal(slime.hp, 14, 'стрела попала, а не разбилась о стену');
+});
+
+// ---------- Отпор и плавность ----------
+
+test('враг, ранивший героя, отскакивает и даёт время ответить', () => {
+    const { game, input } = arena();
+    for (const enemy of game.enemies) enemy.def = { ...enemy.def, speed: 22 };
+    game.player.x = 66;
+    run(game, input, 1);
+    const slime = game.enemies[0];
+    assert.equal(game.player.hp, 114);
+    assert.ok(slime.stun > 0.3, 'после укуса слизень оглушён');
+    const gap = () => Math.abs((slime.x + slime.w / 2) - (game.player.x + game.player.w / 2));
+    const before = gap();
+    run(game, input, 20);
+    assert.ok(gap() > before + 10, `отскочил: было ${before}, стало ${gap()}`);
+    assert.equal(game.player.hp, 114, 'пока отскакивает — не ранит');
+});
+
+test('страж после удара не отскакивает', () => {
+    const { game, input } = fight('#P.......T........E#');
+    const boss = game.enemies[0];
+    game.player.x = boss.x + 4;
+    run(game, input, 1);
+    assert.equal(game.player.hp, 112);
+    assert.equal(boss.stun, 0);
+});
+
+test('стрелы не замораживают кадр, удар мечом — замораживает', () => {
+    const shot = arena('archer');
+    shot.target.dispatch('keydown', { code: 'KeyJ' });
+    run(shot.game, shot.input, 40, () => shot.game.enemies[0].hp < 24);
+    assert.equal(shot.game.freeze, 0);
+
+    const blow = arena('swordsman');
+    blow.game.player.x = 45;
+    blow.target.dispatch('keydown', { code: 'KeyJ' });
+    run(blow.game, blow.input, 2);
+    assert.ok(blow.game.freeze > 0);
+});
+
+test('плавность: игра помнит прошлые положения и долю шага между кадрами', () => {
+    const { game, target } = arena();
+    game.tick(0);
+    target.dispatch('keydown', { code: 'KeyD' });
+    game.tick(100);
+    const { player } = game;
+    assert.ok(player.prevX < player.x, 'прошлое положение героя запомнено');
+    assert.ok(game.alpha >= 0 && game.alpha < 1, `доля шага ${game.alpha}`);
+    assert.equal(game.enemies[0].prevX !== undefined, true);
+    game.pause();
+    game.tick(120);
+    assert.equal(game.alpha, 1, 'на паузе сглаживания нет');
 });

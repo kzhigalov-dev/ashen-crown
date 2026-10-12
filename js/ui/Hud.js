@@ -104,7 +104,7 @@ export class HudOverlay {
 
     // game = null — игра не идёт, все надписи скрыты.
     sync(game) {
-        const playing = Boolean(game) && (game.state === 'playing' || game.state === 'paused');
+        const playing = Boolean(game) && ['playing', 'paused', 'loot'].includes(game.state);
         if (this.shown.get(this.root) !== playing) {
             this.shown.set(this.root, playing);
             this.root.hidden = !playing;

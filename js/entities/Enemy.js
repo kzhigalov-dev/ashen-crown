@@ -4,8 +4,8 @@ import { SOLID, ONEWAY, HAZARD } from '../Level.js';
 import { ENEMIES } from '../data/enemies.js';
 import { TILE, GRAVITY, MAX_FALL } from '../data/constants.js';
 
-const STUN_TIME = 0.2;      // сколько враг оглушён после попадания
-const KNOCKBACK = 70;       // скорость отбрасывания, px/с
+const STUN_TIME = 0.3;      // сколько враг оглушён после попадания
+const KNOCKBACK = 110;      // скорость отбрасывания, px/с
 const FLASH_TIME = 0.12;    // сколько враг мигает белым
 const SIGHT_HEIGHT = 28;    // разница высот, при которой враг ещё видит героя
 const STRIKE_TIME = 0.15;   // сколько скелет стоит в позе удара
@@ -28,6 +28,7 @@ export class Enemy extends Entity {
         this.frozen = 0;            // остаток заморозки (для отрисовки инея)
         this.lastHitId = null;
         this.animTime = 0;
+        this.alertTimer = 0;        // волк: сколько ещё замирает, заметив героя
         this.phase = 'walk';        // для скелета: walk → windup → strike → recover
         this.timer = def.rate ?? 0; // до следующего выстрела или смены фазы
         this.baseX = this.x;        // точка, вокруг которой летает бес
@@ -88,14 +89,26 @@ export class Enemy extends Entity {
         return hit;
     }
 
-    // Волк: увидев героя, разгоняется в его сторону.
+    // Волк: увидев героя, на миг замирает (и мигает — это предупреждение),
+    // затем разгоняется в его сторону. Потеряв из виду — снова патрулирует.
     charge(dt, level, player) {
-        this.chasing = this.sees(player);
-        if (this.chasing) {
-            this.face(player);
-            this.walk(dt, level, this.facing, this.def.chaseSpeed, false);
-        } else {
+        const seen = this.sees(player, this.def.sight, level);
+        if (!seen) {
+            this.chasing = false;
+            this.phase = 'walk';
             this.walk(dt, level, this.facing, this.def.speed, true);
+            return;
+        }
+        if (!this.chasing) this.alertTimer = this.def.alert ?? 0;
+        this.chasing = true;
+        this.face(player);
+        if (this.alertTimer > 0) {
+            this.alertTimer -= dt;
+            this.phase = 'windup';
+            this.walk(dt, level, 0, 0, false);
+        } else {
+            this.phase = 'walk';
+            this.walk(dt, level, this.facing, this.def.chaseSpeed, false);
         }
     }
 
@@ -103,7 +116,7 @@ export class Enemy extends Entity {
     strike(dt, level, player) {
         const { reach, windup, recover, strikeDamage } = this.def;
         if (this.phase === 'walk') {
-            if (this.sees(player, reach + this.w / 2 + 4)) {
+            if (this.sees(player, reach + this.w / 2 + 4, level)) {
                 this.face(player);
                 this.phase = 'windup';
                 this.timer = windup;
@@ -136,7 +149,7 @@ export class Enemy extends Entity {
     shoot(dt, level, player) {
         this.walk(dt, level, 0, 0, false);
         this.timer = Math.max(0, this.timer - dt);
-        if (!this.sees(player)) return;
+        if (!this.sees(player, this.def.sight, level)) return;
         this.face(player);
         if (this.timer > 0) return;
         this.timer = this.def.rate;
@@ -187,12 +200,31 @@ export class Enemy extends Entity {
         return level.tileAt(col, footRow - 1) !== HAZARD;
     }
 
-    // Видит ли враг героя: по горизонтали ближе range и примерно на той же высоте.
-    sees(player, range = this.def.sight) {
+    // Видит ли враг героя: по горизонтали ближе range, примерно на той же высоте
+    // и между ними нет стены (если передан уровень).
+    sees(player, range = this.def.sight, level = null) {
         if (player.dead) return false;
         const dx = Math.abs(this.centerX(player) - this.centerX(this));
         const dy = Math.abs(player.y + player.h - (this.y + this.h));
-        return dx < range && dy < SIGHT_HEIGHT;
+        if (dx >= range || dy >= SIGHT_HEIGHT) return false;
+        return !level || this.clearPath(level, player);
+    }
+
+    // Прямая видимость: на уровне середины тела врага между ним и героем нет твёрдых тайлов.
+    clearPath(level, player) {
+        const row = Math.floor((this.y + this.h / 2) / TILE);
+        const from = Math.floor(Math.min(this.centerX(this), this.centerX(player)) / TILE);
+        const to = Math.floor(Math.max(this.centerX(this), this.centerX(player)) / TILE);
+        for (let col = from; col <= to; col++) {
+            if (level.tileAt(col, row) === SOLID) return false;
+        }
+        return true;
+    }
+
+    // Враг ранил героя и отскакивает: у героя есть время ответить.
+    recoil(dir, time) {
+        this.stun = time;
+        this.knockDir = dir;
     }
 
     face(player) {

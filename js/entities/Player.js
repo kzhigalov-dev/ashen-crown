@@ -4,7 +4,7 @@ import { CLASSES } from '../data/classes.js';
 import { WEAPONS } from '../data/weapons.js';
 import { CRIT_MULT } from '../data/items.js';
 import {
-    TILE, GRAVITY, RUN_SPEED, JUMP_SPEED, MAX_FALL,
+    TILE, GRAVITY, RUN_SPEED, RUN_ACCEL, AIR_ACCEL, JUMP_SPEED, MAX_FALL,
     COYOTE_TIME, JUMP_BUFFER, JUMP_CUT, INVULN_TIME, AIR_JUMP_FACTOR,
 } from '../data/constants.js';
 
@@ -71,7 +71,10 @@ export class Player extends Entity {
     }
 
     move(dt, dir, input, level) {
-        this.vx = dir * RUN_SPEED;
+        // Скорость набирается и гасится плавно, а не мгновенно.
+        const change = dir * RUN_SPEED - this.vx;
+        const limit = (this.onGround ? RUN_ACCEL : AIR_ACCEL) * dt;
+        this.vx += Math.max(-limit, Math.min(limit, change));
 
         // onGround здесь — результат прошлого шага.
         const pressed = input.wasPressed('jump');
@@ -111,7 +114,8 @@ export class Player extends Entity {
     dash(dt, level) {
         const { speed } = this.weapon.ability;
         this.dashTime -= dt;
-        this.vx = this.facing * speed;
+        // В конце рывка скорость сбрасывается до беговой — без долгого скольжения.
+        this.vx = this.facing * (this.dashTime > 0 ? speed : RUN_SPEED);
         this.vy = 0;
         this.onGround = moveAndCollide(this, level, dt).onGround;
         this.state = 'dash';
@@ -211,6 +215,17 @@ export class Player extends Entity {
         return { x: this.facing > 0 ? cx : cx - reach, y: this.y - 4, w: reach, h: this.h + 4 };
     }
 
+    // Смена снаряжения посреди уровня: новые бонусы и оружие действуют сразу.
+    // Прибавка к здоровью от брони добавляется и к текущему здоровью.
+    setGear(bonus, weapon) {
+        const before = this.maxHp;
+        this.bonus = { damage: 0, hp: 0, attackSpeed: 0, crit: 0, ...bonus };
+        this.weapon = weapon;
+        this.maxHp = this.classDef.maxHp + this.bonus.hp;
+        this.hp = Math.max(1, Math.min(this.maxHp, this.hp + Math.max(0, this.maxHp - before)));
+        this.attackTime = 0;
+    }
+
     // Отдаёт накопленные действия и очищает очередь.
     takeActions() {
         const actions = this.actions;
@@ -236,6 +251,8 @@ export class Player extends Entity {
     placeAt(point) {
         this.x = point.x + (TILE - this.w) / 2;
         this.y = point.y + TILE - this.h;
+        this.prevX = this.x;   // перенос, а не движение: отрисовка не должна его сглаживать
+        this.prevY = this.y;
         this.vx = 0;
         this.vy = 0;
     }

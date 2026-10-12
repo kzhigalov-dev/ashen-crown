@@ -71,9 +71,23 @@ test('бежит вправо со скоростью 110 px/с', () => {
     const player = settled(flat);
     const startX = player.x;
     steps(player, flat, 60, input(['right']));
-    assert.ok(Math.abs(player.x - startX - 110) < 1, `сдвиг ${player.x - startX}`);
+    assert.equal(player.vx, 110);
+    const moved = player.x - startX;
+    assert.ok(moved > 103 && moved < 110, `сдвиг ${moved}: чуть меньше 110 из-за разгона`);
     assert.equal(player.facing, 1);
     assert.equal(player.state, 'run');
+});
+
+test('разгон и торможение плавные, но быстрые', () => {
+    const player = settled(flat);
+    player.update(STEP, input(['right']), flat);
+    assert.ok(player.vx > 0 && player.vx < 110, 'за один шаг полная скорость не набирается');
+    steps(player, flat, 6, input(['right']));
+    assert.equal(player.vx, 110, 'полная скорость меньше чем за 0,12 с');
+    player.update(STEP, NONE, flat);
+    assert.ok(player.vx > 0 && player.vx < 110, 'остановка не мгновенная');
+    steps(player, flat, 6);
+    assert.equal(player.vx, 0);
 });
 
 test('смотрит влево при движении влево', () => {
@@ -143,13 +157,15 @@ test('буфер прыжка: нажатие чуть до приземлени
     assert.equal(jumped, true);
 });
 
-test('hurt: урон и неуязвимость на 0,8 с', () => {
+test('hurt: урон и неуязвимость на 1 с', () => {
     const player = settled(flat);
     assert.equal(player.hurt(10), true);
     assert.equal(player.hp, 110);
     assert.equal(player.hurt(10), false);
     assert.equal(player.hp, 110);
     steps(player, flat, 55);
+    assert.equal(player.hurt(10), false, 'через 0,9 с ещё неуязвим');
+    steps(player, flat, 10);
     assert.equal(player.hurt(10), true);
     assert.equal(player.hp, 100);
 });
@@ -511,4 +527,22 @@ test('крит залпа бросается один раз на все сна�
     const shots = player.takeActions();
     assert.equal(calls, 1);
     assert.ok(shots.every((shot) => shot.crit && shot.damage === 28));
+});
+
+test('setGear: новое оружие и бонусы действуют сразу, прибавка здоровья идёт и в текущее', () => {
+    const player = armed('sword');
+    player.hp = 50;
+    player.setGear({ hp: 30, damage: 5 }, WEAPONS.axe);
+    assert.equal(player.weapon.id, 'axe');
+    assert.equal(player.maxHp, 150);
+    assert.equal(player.hp, 80);
+    player.update(STEP, HOLD_ATTACK, flat);
+    assert.equal(player.takeActions()[0].damage, 29, 'удар секиры плюс бонус');
+
+    player.setGear({}, WEAPONS.sword);
+    assert.equal(player.maxHp, 120);
+    assert.equal(player.hp, 80, 'снятая броня не убивает и не лечит');
+    player.hp = 140;
+    player.setGear({}, WEAPONS.sword);
+    assert.equal(player.hp, 120, 'но выше максимума здоровье не остаётся');
 });

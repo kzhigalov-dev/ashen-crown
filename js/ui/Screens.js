@@ -4,6 +4,7 @@ import { WEAPONS } from '../data/weapons.js';
 import { rarityOf, dismantleValue } from '../systems/Loot.js';
 import { PROLOGUE, STORY, EPILOGUE } from '../data/story.js';
 
+const CLICK_GUARD = 350;                // мс: окно находки не реагирует на нажатия сразу после появления
 const TYPE_SPEED = 48;                 // букв в секунду при «печати» сюжетного текста
 const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
 const TIPS = [
@@ -16,7 +17,7 @@ const TIPS = [
 // Состояния игры и экраны, которые им соответствуют.
 const STATE_SCREENS = {
     menu: 'menu', classSelect: 'class', map: 'map', equipment: 'equipment', story: 'story',
-    paused: 'paused', complete: 'complete', victory: 'victory', dead: 'dead',
+    paused: 'paused', loot: 'loot', complete: 'complete', victory: 'victory', dead: 'dead',
 };
 // Страницы меню, у которых нет своего состояния игры.
 const PAGES = ['controls', 'settings', 'about', 'prologue'];
@@ -44,6 +45,7 @@ export class Screens {
         this.prologueIndex = 0;
         this.typing = null;       // «печатающийся» текст: { element, text, start, done }
         this.selected = null;     // выбранный предмет: { from: 'bag', index } или { from: 'slot', slot }
+        this.shownAt = 0;         // когда показан текущий экран
         this.reducedMotion = root.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     }
 
@@ -56,6 +58,9 @@ export class Screens {
             ...handlers,
             new: () => this.openPrologue(),
             begin: () => this.advance(() => handlers.begin()),
+            // Окно находки появляется посреди боя: случайное нажатие в первый миг не считается.
+            lootEquip: () => this.guarded(() => handlers.lootEquip()),
+            lootKeep: () => this.guarded(() => handlers.lootKeep()),
             prologueNext: () => this.advance(() => this.nextPrologue()),
             prologueSkip: () => this.closePrologue(),
         };
@@ -100,6 +105,10 @@ export class Screens {
         const index = items.indexOf(this.root.activeElement);
         items[(index + step + items.length) % items.length].focus();
         this.handlers.sound('ui');
+    }
+
+    guarded(action) {
+        if (performance.now() - this.shownAt >= CLICK_GUARD) action();
     }
 
     // Экран, который сейчас показан.
@@ -154,6 +163,8 @@ export class Screens {
             this.copy(this.art.crown(this.worlds.length), this.byId('victory-crown'));
             this.type(this.byId('victory-text'), EPILOGUE.join('\n\n'));
             this.renderStats(this.byId('victory-stats'), game);
+        } else if (state === 'loot') {
+            this.renderLoot(game);
         } else if (state === 'dead') {
             this.byId('dead-tip').textContent = TIPS[(game.stats.hits + game.levelIndex) % TIPS.length];
         }
@@ -164,6 +175,7 @@ export class Screens {
     // экранами можно управлять с клавиатуры.
     show() {
         const active = this.current();
+        this.shownAt = performance.now();
         for (const element of Object.values(this.screens)) element.hidden = element !== active;
         this.pauseButton.hidden = this.state !== 'playing';
         if (!active) return;
@@ -386,6 +398,57 @@ export class Screens {
         this.renderDetail(inventory);
     }
 
+    // Окно находки: что найдено, чем отличается от надетого и что с ним сделать.
+    renderLoot(game) {
+        const { item, index } = game.found;
+        const { inventory } = game.profile;
+        const detail = this.byId('loot-detail');
+        detail.replaceChildren();
+        const worn = inventory.equipped[item.slot];
+        this.describe(detail, item, worn);
+        detail.append(this.el('p', '', worn ? `Сейчас надето: ${worn.name}` : 'В этом слоте пока пусто.'));
+
+        // Сумка полна: надеть можно (прежний предмет разберётся), оставить — нельзя.
+        const full = index === null;
+        this.byId('loot-equip').textContent = full && worn
+            ? `Надеть (прежний разберётся: +${dismantleValue(worn)} золота)`
+            : 'Надеть';
+        this.byId('loot-keep').textContent = full
+            ? `Сумка полна — разобрать (+${dismantleValue(item)} золота)`
+            : 'В сумку';
+    }
+
+    // Пишет в контейнер описание предмета: название, слот, что даёт вид оружия
+    // и свойства. worn — надетый в том же слоте предмет: показывается разница с ним.
+    describe(container, item, worn = null) {
+        container.style.setProperty('--rarity', rarityOf(item).color);
+        container.append(this.el('strong', '', item.name), this.el('p', '', SLOT_NAMES[item.slot]));
+
+        const weapon = WEAPONS[item.kind];
+        if (weapon) {
+            container.append(
+                this.el('p', 'moves', weapon.text),
+                this.el('p', 'moves', `J — ${weapon.attack.name}`),
+                this.el('p', 'moves', `K — ${weapon.ability.name}: ${weapon.ability.text}`)
+            );
+        }
+
+        const list = this.el('ul');
+        for (const stat of STAT_ORDER) {
+            const value = item.stats[stat] ?? 0;
+            const current = worn?.stats[stat] ?? 0;
+            if (value === 0 && current === 0) continue;
+            const { name, unit } = STATS[stat];
+            const line = this.el('li', '', value > 0 ? `${name}: +${value}${unit}` : `${name}: —`);
+            const diff = value - current;
+            if (worn && diff !== 0) {
+                line.append(' ', this.el('span', diff > 0 ? 'up' : 'down', `(${diff > 0 ? '+' : ''}${diff})`));
+            }
+            list.append(line);
+        }
+        container.append(list);
+    }
+
     // Описание выбранного предмета и действия с ним.
     renderDetail(inventory) {
         const detail = this.byId('item-detail');
@@ -402,35 +465,8 @@ export class Screens {
             return;
         }
 
-        detail.style.setProperty('--rarity', rarityOf(item).color);
-        detail.append(this.el('strong', '', item.name), this.el('p', '', SLOT_NAMES[item.slot]));
-
-        // Вид оружия меняет атаку и способность — показываем, что именно.
-        const weapon = WEAPONS[item.kind];
-        if (weapon) {
-            detail.append(
-                this.el('p', 'moves', `${weapon.text}`),
-                this.el('p', 'moves', `J — ${weapon.attack.name}`),
-                this.el('p', 'moves', `K — ${weapon.ability.name}: ${weapon.ability.text}`)
-            );
-        }
-
         // Для предмета из сумки показываем разницу с надетым в том же слоте.
-        const worn = fromBag ? inventory.equipped[item.slot] : null;
-        const list = this.el('ul');
-        for (const stat of STAT_ORDER) {
-            const value = item.stats[stat] ?? 0;
-            const current = worn?.stats[stat] ?? 0;
-            if (value === 0 && current === 0) continue;
-            const { name, unit } = STATS[stat];
-            const line = this.el('li', '', value > 0 ? `${name}: +${value}${unit}` : `${name}: —`);
-            const diff = value - current;
-            if (worn && diff !== 0) {
-                line.append(' ', this.el('span', diff > 0 ? 'up' : 'down', `(${diff > 0 ? '+' : ''}${diff})`));
-            }
-            list.append(line);
-        }
-        detail.append(list);
+        this.describe(detail, item, fromBag ? inventory.equipped[item.slot] : null);
 
         if (fromBag) {
             const equip = this.el('button', '', 'Надеть');

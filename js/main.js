@@ -45,7 +45,7 @@ const game = new Game({
     onStateChange: (state, current) => {
         screens.onState(state, current);
         // Во время уровня звучит фон локации, в остальное время — фон меню.
-        const inLevel = ['playing', 'paused'].includes(state);
+        const inLevel = ['playing', 'paused', 'loot'].includes(state);
         audio.startAmbience(inLevel ? current.levelDef.world : 'menu');
     },
 });
@@ -60,6 +60,8 @@ screens.bind({
     map: () => game.openMap(),
     equipment: () => game.openEquipment(),
     begin: () => game.beginLevel(),
+    lootEquip: () => game.takeFound(true),
+    lootKeep: () => game.takeFound(false),
     play: (index) => game.enterLevel(index),
     equip: (index) => game.equipItem(index),
     unequip: (slot) => game.unequipSlot(slot),

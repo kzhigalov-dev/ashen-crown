@@ -32,8 +32,8 @@ test('враг появляется ногами на низу тайла, по 
     const slime = new Enemy('slime', 64, 32);
     assert.equal(slime.x, 65);
     assert.equal(slime.y, 38);
-    assert.equal(slime.hp, 30);
-    assert.equal(slime.damage, 10);
+    assert.equal(slime.hp, 24);
+    assert.equal(slime.damage, 6);
 });
 
 test('слизень разворачивается у стены', () => {
@@ -55,13 +55,38 @@ test('слизень разворачивается у края и не пада
     assert.equal(slime.y, 38);
 });
 
-test('волк бросается на героя в поле зрения', () => {
+test('волк, заметив героя, сначала замирает, потом бросается', () => {
     const wolf = new Enemy('wolf', 80, 32);
     const startX = wolf.x;
-    run(wolf, 0.5, hero());
+    run(wolf, 0.3, hero());
     assert.equal(wolf.chasing, true);
+    assert.equal(wolf.phase, 'windup', 'замер и мигает — предупреждение');
+    assert.equal(wolf.x, startX);
+    run(wolf, 0.7, hero());
     assert.equal(wolf.facing, -1);
+    assert.equal(wolf.phase, 'walk');
     assert.ok(startX - wolf.x > 40, `пробежал ${startX - wolf.x}`);
+});
+
+test('волк бежит медленнее героя — от него можно уйти', async () => {
+    const { RUN_SPEED } = await import('../js/data/constants.js');
+    const { ENEMIES } = await import('../js/data/enemies.js');
+    assert.ok(ENEMIES.wolf.chaseSpeed < RUN_SPEED);
+});
+
+test('волк не видит героя за стеной', () => {
+    // Между волком и героем блок высотой в один тайл.
+    const walled = new Level({
+        id: 'w', name: 'W',
+        segments: [['............', '............', 'P...#......E', '############']],
+    });
+    const wolf = new Enemy('wolf', 112, 32);
+    for (let i = 0; i < 60; i++) wolf.update(STEP, walled, hero());
+    assert.equal(wolf.chasing, false);
+    // Тот же волк по ту же сторону стены, что и герой, — видит.
+    const near = new Enemy('wolf', 48, 32);
+    for (let i = 0; i < 10; i++) near.update(STEP, walled, hero());
+    assert.equal(near.chasing, true);
 });
 
 test('волк не видит героя на другой высоте и просто патрулирует', () => {
@@ -90,12 +115,12 @@ test('волк в погоне останавливается у края', () =
 test('попадание: урон, оглушение, мигание; тот же удар дважды не ранит', () => {
     const slime = new Enemy('slime', 64, 32);
     assert.equal(slime.hit(10, 'a', 1), true);
-    assert.equal(slime.hp, 20);
+    assert.equal(slime.hp, 14);
     assert.ok(slime.stun > 0 && slime.flash > 0);
     assert.equal(slime.hit(10, 'a', 1), false);
-    assert.equal(slime.hp, 20);
+    assert.equal(slime.hp, 14);
     assert.equal(slime.hit(10, 'b', 1), true);
-    assert.equal(slime.hp, 10);
+    assert.equal(slime.hp, 4);
 });
 
 test('враг погибает и больше не получает урон', () => {
@@ -146,7 +171,7 @@ function runIn(level, enemy, seconds, player, each = () => {}) {
     }
 }
 
-test('скелет-мечник: замах 0,4 с, затем один удар в сторону героя', () => {
+test('скелет-мечник: замах 0,5 с, затем один удар в сторону героя', () => {
     const skeleton = new Enemy('skeleton', 80, 32);
     const player = hero({ x: 66 });   // вплотную слева
     const strikes = [];
@@ -156,7 +181,7 @@ test('скелет-мечник: замах 0,4 с, затем один удар
     runIn(yard, skeleton, 0.3, player, (actions) => strikes.push(...actions));
     assert.equal(strikes.length, 1);
     assert.equal(strikes[0].type, 'strike');
-    assert.equal(strikes[0].damage, 18);
+    assert.equal(strikes[0].damage, 12);
     const center = skeleton.x + skeleton.w / 2;
     assert.ok(strikes[0].box.x + strikes[0].box.w <= center + 0.001, 'бьёт влево, где герой');
 });
@@ -180,7 +205,7 @@ test('скелет-мечник: без героя рядом патрулиру
     assert.ok(Math.abs(skeleton.x - startX) > 20);
 });
 
-test('скелет-лучник: стоит и стреляет в сторону героя раз в 2 с', () => {
+test('скелет-лучник: стоит и стреляет в сторону героя раз в 2,2 с', () => {
     const archer = new Enemy('skeletonArcher', 144, 32);
     const player = hero({ x: 20 });
     const shots = [];
@@ -189,7 +214,7 @@ test('скелет-лучник: стоит и стреляет в сторон�
     assert.equal(shots.length, 2);
     assert.deepEqual(
         { type: shots[0].type, kind: shots[0].kind, dir: shots[0].dir, damage: shots[0].damage },
-        { type: 'shot', kind: 'enemyArrow', dir: -1, damage: 10 }
+        { type: 'shot', kind: 'enemyArrow', dir: -1, damage: 7 }
     );
 });
 
@@ -219,4 +244,23 @@ test('бес: стреляет огнём точно в героя', () => {
     assert.equal(shots.length, 1);
     assert.equal(shots[0].kind, 'fireball');
     assert.deepEqual(shots[0].target, { x: 65, y: 37 });
+});
+
+test('удар отбрасывает врага заметно: больше половины тайла', () => {
+    const slime = new Enemy('slime', 48, 32);
+    run(slime, 0.1);
+    const before = slime.x;
+    slime.hit(5, 'a', 1);
+    run(slime, 0.4);
+    assert.ok(slime.x - before > 20, `отлетел на ${slime.x - before}`);
+});
+
+test('отскок: враг, ранивший героя, уходит в сторону и на время безвреден', () => {
+    const slime = new Enemy('slime', 64, 32);
+    run(slime, 0.1);
+    const before = slime.x;
+    slime.recoil(1, 0.45);
+    assert.ok(slime.stun > 0);
+    run(slime, 0.3);
+    assert.ok(slime.x > before + 15);
 });

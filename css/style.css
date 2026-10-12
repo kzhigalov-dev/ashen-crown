@@ -635,6 +635,11 @@ input:focus-visible {
     line-height: 1.6;
 }
 
+/* Окно находки: описание предмета шире кнопок не растягивается. */
+.sheet.detail {
+    align-items: stretch;
+}
+
 .detail p.moves {
     margin-top: 0;
     color: var(--parchment);

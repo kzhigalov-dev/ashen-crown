@@ -81,10 +81,10 @@ test('босс не оглушается и не отбрасывается, т�
 test('вторая фаза начинается с половины здоровья и ускоряет атаки', () => {
     const boss = new Boss('treant', 160, 80);
     assert.equal(boss.phase2, false);
-    assert.equal(boss.attackRate, 2.2);
+    assert.equal(boss.attackRate, 2.4);
     boss.hit(130, 'a', 1);
     assert.equal(boss.phase2, true);
-    assert.equal(boss.attackRate, 1.4);
+    assert.equal(boss.attackRate, 1.6);
 });
 
 test('Древо: стоит на полу и бьёт корнями под героем с предупреждением', () => {
@@ -98,7 +98,7 @@ test('Древо: стоит на полу и бьёт корнями под г�
     assert.equal(roots[0].x + roots[0].w / 2, 65, 'под серединой героя');
     assert.equal(roots[0].bottom, FLOOR);
     assert.ok(roots[0].delay >= 0.5, 'есть время отойти');
-    assert.equal(roots[0].damage, 15);
+    assert.equal(roots[0].damage, 11);
 });
 
 test('Древо: во второй фазе корней больше', () => {
@@ -112,7 +112,7 @@ test('Древо: во второй фазе корней больше', () => {
 
 test('Древо: призывает слизней рядом с собой, со стороны героя', () => {
     const boss = new Boss('treant', 160, 80);
-    const summons = ofType(run(boss, 7.5, hero()), 'summon');
+    const summons = ofType(run(boss, 8.5, hero()), 'summon');
     assert.equal(summons.length, 1);
     assert.equal(summons[0].enemy, 'slime');
     assert.ok(summons[0].x < boss.x, 'герой слева — слизень появляется слева');
@@ -175,15 +175,15 @@ test('Демон: залп из 3 шаров, во второй фазе из 5;
     const first = run(boss, 2, player);
     assert.equal(ofType(first, 'shot').length, 3);
     assert.equal(ofType(first, 'shot')[1].target.x, 105, 'средний шар — точно в героя');
-    const second = run(boss, 2.4, player);
+    const second = run(boss, 2.6, player);
     const pillars = ofType(second, 'hazard');
     assert.equal(pillars.length, 3);
     assert.equal(pillars[0].kind, 'pillar');
     assert.ok(pillars[0].delay >= 0.5);
 
-    // Пауза перед этой атакой была назначена ещё в первой фазе (2,4 с).
+    // Пауза перед этой атакой была назначена ещё в первой фазе (2,6 с).
     boss.hit(300, 'a', 1);
-    const third = run(boss, 2, player);
+    const third = run(boss, 2.6, player);
     assert.equal(ofType(third, 'shot').length, 5);
 });
 
