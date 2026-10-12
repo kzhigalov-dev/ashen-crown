@@ -358,11 +358,14 @@ export class Screens {
     // редкость видна по цвету, а полное название читает экранный диктор.
     itemButton(item, emptyText, selected, onClick, short = false) {
         const label = item && short ? item.name.split(' ').slice(1).join(' ') : item?.name;
-        const button = this.el('button', 'item', item ? label : emptyText);
+        const button = this.el('button', 'item', item ? '' : emptyText);
         if (!item) {
             button.disabled = true;
             return button;
         }
+        const icon = this.copy(this.art.icon(item));
+        icon.className = 'icon';
+        button.append(icon, this.el('span', '', label));
         button.setAttribute('aria-label', item.name);
         button.style.setProperty('--rarity', rarityOf(item).color);
         if (selected) button.classList.add('selected');
@@ -435,7 +438,9 @@ export class Screens {
     // и свойства. worn — надетый в том же слоте предмет: показывается разница с ним.
     describe(container, item, worn = null) {
         container.style.setProperty('--rarity', rarityOf(item).color);
-        container.append(this.el('strong', '', item.name), this.el('p', '', SLOT_NAMES[item.slot]));
+        const icon = this.copy(this.art.icon(item));
+        icon.className = 'icon icon--big';
+        container.append(icon, this.el('strong', '', item.name), this.el('p', '', SLOT_NAMES[item.slot]));
 
         const weapon = WEAPONS[item.kind];
         if (weapon) {

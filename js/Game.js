@@ -16,7 +16,7 @@ import {
     HAZARD_DAMAGE, HAZARD_INSET, INVULN_TIME, COIN_VALUE, CAMERA_LERP, NOTICE_TIME,
     TILE, MAX_SUMMONED, PILLAR_PERIOD, PILLAR_DAMAGE,
     DEATH_TIME, INTRO_TIME, BANNER_TIME, LORE_TIME, SHAKE_DECAY, HITSTOP, HURT_FLASH,
-    RECOIL_TIME, HEART_CHANCE, HEART_HEAL, COMBAT_RANGE, COMBAT_HOLD,
+    RECOIL_TIME, HEART_CHANCE, HEART_HEAL, COMBAT_RANGE, COMBAT_HOLD, BOSS_INTRO,
 } from './data/constants.js';
 
 // Состояния игры:
@@ -76,6 +76,7 @@ export class Game {
         this.intro = 0;             // остаток заставки с названием локации, с
         this.hurtFlash = 0;         // остаток красной вспышки, с
         this.dying = 0;             // остаток паузы после гибели героя, с
+        this.cinema = 0;            // остаток сцены пробуждения стража (экран сужается полосами)
         this.combat = 0;            // сколько ещё секунд музыка считает, что идёт бой
         this.lastStep = 0;          // когда из-под ног в последний раз вылетела пыль
         this.checkpoint = null;
@@ -309,6 +310,7 @@ export class Game {
         this.intro = INTRO_TIME;
         this.hurtFlash = 0;
         this.dying = 0;
+        this.cinema = 0;
         this.combat = 0;
         this.lastStep = 0;
         this.gold = 0;
@@ -371,6 +373,7 @@ export class Game {
                 // Замирание кадра при ударе: мир стоит, нажатия не теряются.
                 if (this.freeze > 0) {
                     this.freeze -= STEP;
+                    this.cinema = Math.max(0, this.cinema - STEP);
                     continue;
                 }
                 this.update(STEP);
@@ -638,6 +641,9 @@ export class Game {
                 this.banner = { title: enemy.def.name, text: enemy.def.line, ttl: BANNER_TIME };
                 this.emit('bossWake');
                 this.addShake(4);
+                // Короткая сцена: мир замирает, пока звучит имя стража.
+                this.freeze = Math.max(this.freeze, BOSS_INTRO);
+                this.cinema = BOSS_INTRO;
             }
             // Оглушённый враг не ранит — у ближнего боя есть окно для удара.
             // Ранив героя, обычный враг отскакивает, а не остаётся вплотную.

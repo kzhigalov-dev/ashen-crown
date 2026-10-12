@@ -249,7 +249,7 @@ button {
     font: inherit;
     font-size: 1em;
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.12s;
 }
 
 button:hover {
@@ -597,8 +597,31 @@ input:focus-visible {
     text-overflow: ellipsis;
 }
 
+.item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+}
+
 .bag .item {
+    flex-direction: column;
+    gap: 0.25em;
     aspect-ratio: 1;
+}
+
+/* Значок предмета — спрайт, увеличенный без сглаживания, в свечении цвета редкости. */
+.icon {
+    width: auto;
+    height: 2.1em;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 0.25em var(--rarity, transparent));
+}
+
+.icon--big {
+    height: 4.2em;
+    align-self: center;
+    margin-bottom: 0.3em;
 }
 
 .item.selected {
@@ -791,6 +814,56 @@ input:focus-visible {
 }
 
 /* ---------- Движение ---------- */
+
+/* Листы, карточки и миры появляются с лёгким подъёмом; соседние — по очереди. */
+.sheet,
+.class-card,
+.world,
+.equip-col {
+    animation: pop 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+.class-card:nth-child(2),
+.world:nth-child(2),
+.equip-col:nth-child(2) {
+    animation-delay: 0.07s;
+}
+
+.class-card:nth-child(3),
+.world:nth-child(3),
+.equip-col:nth-child(3) {
+    animation-delay: 0.14s;
+}
+
+button:active:not(:disabled) {
+    transform: translateY(0.1em);
+}
+
+.class-card:hover,
+.class-card:focus {
+    transform: translateY(-0.2em);
+}
+
+.item.selected .icon {
+    animation: bob 0.9s ease-in-out infinite;
+}
+
+@keyframes pop {
+    from {
+        opacity: 0;
+        transform: translateY(0.7em) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes bob {
+    50% {
+        transform: translateY(-0.15em);
+    }
+}
 
 @keyframes burn {
     from {

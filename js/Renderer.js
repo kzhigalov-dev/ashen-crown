@@ -2,6 +2,8 @@ import { TILE, VIEW_W, VIEW_H, INTRO_TIME, HURT_FLASH, DEATH_TIME } from './data
 import { SOLID } from './Level.js';
 import { PALETTE, SPRITES, GLYPHS, HEROES } from './data/sprites.js';
 import { CLASSES } from './data/classes.js';
+import { WEAPONS } from './data/weapons.js';
+import { BOSS_INTRO } from './data/constants.js';
 import { ENEMIES } from './data/enemies.js';
 import { rarityOf } from './systems/Loot.js';
 import { drawHud } from './ui/Hud.js';
@@ -153,6 +155,13 @@ export class Renderer {
         return this.heroes[classId].idle.right;
     }
 
+    // Значок предмета: у оружия — его спрайт, у брони и амулета — свои картинки.
+    icon(item) {
+        const weapon = WEAPONS[item.kind];
+        if (weapon) return this.sprites[weapon.sprite];
+        return this.sprites[item.slot === 'armor' ? 'iconArmor' : 'iconAmulet'];
+    }
+
     // Корона — знак игры: cleared зубцов из трёх позолочены.
     crown(cleared) {
         const lit = (index) => (cleared > index ? CROWN_GOLD : CROWN_ASH);
@@ -284,6 +293,14 @@ export class Renderer {
             ctx.globalAlpha = Math.min(1, pulse + flash);
             ctx.drawImage(this.danger, 0, 0);
             ctx.globalAlpha = 1;
+        }
+
+        // Сцена пробуждения стража: экран сужается чёрными полосами сверху и снизу.
+        if (game.cinema > 0) {
+            const bar = Math.round(22 * Math.min(1, (game.cinema / BOSS_INTRO) * 3, (1 - game.cinema / BOSS_INTRO) * 6 + 0.2));
+            ctx.fillStyle = '#0d0b10';
+            ctx.fillRect(0, 0, VIEW_W, bar);
+            ctx.fillRect(0, VIEW_H - bar, VIEW_W, bar);
         }
 
         drawHud(this, game);
@@ -551,6 +568,7 @@ export class Renderer {
         const tiles = this.tilesFor(game.levelDef);
         const first = Math.max(0, Math.floor(camX / TILE) - 1);
         const last = Math.min(level.cols - 1, Math.floor((camX + VIEW_W) / TILE) + 1);
+        this.drawArena(game);
         this.drawProps(game, first - 3, last + 3);
         for (let row = 0; row < level.rows; row++) {
             for (let col = first; col <= last; col++) {
@@ -592,6 +610,73 @@ export class Renderer {
         if (level.tileAt(col - 1, row) !== SOLID) ctx.fillRect(x, y, 2, TILE);
         if (level.tileAt(col + 1, row) !== SOLID) ctx.fillRect(x + TILE - 2, y, 2, TILE);
         if (row + 1 < level.rows && level.tileAt(col, row + 1) !== SOLID) ctx.fillRect(x, y + TILE - 3, TILE, 3);
+    }
+
+    // Логово стража: за ареной стоит то, что он стережёт. В лесу — исполинское дерево,
+    // в замке — трон под знамёнами, в подземелье — огненный провал с рогатым черепом.
+    drawArena(game) {
+        const { level, time } = game;
+        level.bossSpawn ??= level.enemies.find((spawn) => ENEMIES[spawn.type].boss) ?? null;
+        const spawn = level.bossSpawn;
+        if (!spawn || Math.abs(spawn.x - this.camX - VIEW_W / 2) > VIEW_W) return;
+        const { ctx } = this;
+        const x = spawn.x + 8;
+        const y = spawn.y + TILE;
+        if (spawn.type === 'treant') {
+            ctx.fillStyle = '#17120e';
+            ctx.fillRect(x - 46, y - 270, 92, 270);
+            ctx.fillRect(x - 70, y - 22, 140, 22);
+            ctx.fillRect(x - 96, y - 8, 192, 8);
+            ctx.fillStyle = '#13261c';
+            ctx.fillRect(x - 170, y - 270, 340, 74);
+            ctx.fillRect(x - 130, y - 200, 260, 26);
+            // Вырезанные на коре знаки клятвы тлеют.
+            ctx.fillStyle = `rgba(127, 174, 74, ${0.35 + 0.2 * Math.sin(time * 2)})`;
+            for (const [dx, dy] of [[-30, -120], [24, -150], [-8, -84], [30, -70]]) {
+                ctx.fillRect(x + dx, y + dy, 2, 8);
+                ctx.fillRect(x + dx - 2, y + dy + 3, 6, 2);
+            }
+        } else if (spawn.type === 'knight') {
+            // Высокое окно с лунным светом.
+            ctx.fillStyle = '#12131b';
+            ctx.fillRect(x - 22, y - 150, 44, 96);
+            ctx.fillStyle = 'rgba(201, 205, 224, 0.28)';
+            ctx.fillRect(x - 18, y - 146, 36, 88);
+            ctx.fillStyle = '#12131b';
+            ctx.fillRect(x - 2, y - 146, 4, 88);
+            ctx.fillRect(x - 18, y - 106, 36, 3);
+            this.light(x, y - 100, 90, 0.55);
+            // Трон.
+            ctx.fillStyle = '#2a2c3a';
+            ctx.fillRect(x - 16, y - 58, 32, 58);
+            ctx.fillRect(x - 22, y - 26, 44, 26);
+            ctx.fillStyle = '#b0842a';
+            ctx.fillRect(x - 16, y - 60, 32, 2);
+            ctx.fillRect(x - 3, y - 68, 6, 8);
+            // Знамёна по сторонам.
+            for (const dx of [-84, 70]) {
+                ctx.fillStyle = '#5a1822';
+                ctx.fillRect(x + dx, y - 150, 16, 78);
+                ctx.fillRect(x + dx, y - 72, 5, 8);
+                ctx.fillRect(x + dx + 11, y - 72, 5, 8);
+                ctx.fillStyle = '#b0842a';
+                ctx.fillRect(x + dx, y - 150, 16, 3);
+            }
+        } else {
+            // Огненный провал за спиной Демона.
+            const pulse = 0.5 + 0.12 * Math.sin(time * 3);
+            this.glow(x, y - 20, 150, '#e2572b', pulse * 0.5);
+            this.light(x, y - 30, 150, 0.7);
+            ctx.fillStyle = '#1a0a0a';
+            ctx.fillRect(x - 40, y - 96, 80, 96);
+            ctx.fillRect(x - 64, y - 126, 16, 60);
+            ctx.fillRect(x + 48, y - 126, 16, 60);
+            ctx.fillRect(x - 64, y - 76, 128, 14);
+            ctx.fillStyle = `rgba(242, 138, 46, ${pulse})`;
+            ctx.fillRect(x - 22, y - 70, 12, 10);
+            ctx.fillRect(x + 10, y - 70, 12, 10);
+            ctx.fillRect(x - 14, y - 40, 28, 4);
+        }
     }
 
     // Строка поверхности в колонке: верхний твёрдый тайл, над которым пусто.
@@ -957,7 +1042,9 @@ export class Renderer {
             if (enemy.stun > 0 && !def.boss) stretch = -0.14;
             else if (enemy.type === 'slime') stretch = Math.sin(enemy.animTime * 8) * 0.07;
             else if (def.boss) stretch = Math.sin(enemy.animTime * 2) * 0.015;
-            this.posed(sx + sw / 2, sy + sh, 0, stretch, 1, () => {
+            // Спящий страж стоит в тени, пока герой не подойдёт.
+            const asleep = def.boss && !enemy.awake;
+            this.posed(sx + sw / 2, sy + sh, 0, asleep ? 0 : stretch, asleep ? 0.55 : 1, () => {
                 ctx.drawImage(sprite, sx, sy, sw, sh);
                 if (def.weapon) this.drawHeld(def.weapon, sx, sy, sprite.width, right, scale, this.foeWeaponAngle(enemy));
             });

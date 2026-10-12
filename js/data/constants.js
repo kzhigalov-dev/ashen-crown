@@ -36,6 +36,7 @@ export const NOTICE_TIME = 2;
 export const DEATH_TIME = 0.8;     // пауза между гибелью героя и экраном поражения
 export const INTRO_TIME = 2.4;     // заставка с названием локации в начале уровня
 export const BANNER_TIME = 3.2;    // сколько висит объявление о боссе
+export const BOSS_INTRO = 0.9;     // на сколько мир замирает, когда страж просыпается
 export const LORE_TIME = 4.5;      // сколько видна записка у костра
 export const SHAKE_DECAY = 24;     // на сколько пикселей в секунду затухает тряска
 export const HITSTOP = 0.02;       // замирание кадра при ударе ближнего боя

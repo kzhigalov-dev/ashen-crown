@@ -732,4 +732,30 @@ export const SPRITES = {
         '.kBBBBBBBBBBBBBBBBBk.',
         '.kkkkkkkkkkkkkkkkkkk.',
     ],
+
+    // Значки брони и амулета для сумки (у оружия значок — его же спрайт).
+    iconArmor: [
+        '.xx....xx.',
+        'xXXx..xXXx',
+        'xXXXxxXXXx',
+        '.xXXXXXXx.',
+        '.xXXbbXXx.',
+        '.xXXXXXXx.',
+        '.xXXXXXXx.',
+        '.xaXXXXax.',
+        '..xaaaax..',
+        '...xxxx...',
+    ],
+    iconAmulet: [
+        '.y....y.',
+        'y......y',
+        'y......y',
+        '.y....y.',
+        '..y..y..',
+        '...yy...',
+        '..yRRy..',
+        '.yRFFRy.',
+        '..yRRy..',
+        '...yy...',
+    ],
 };

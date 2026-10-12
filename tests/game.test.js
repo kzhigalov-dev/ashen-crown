@@ -1453,3 +1453,21 @@ test('накал: проснувшийся страж — 2, спящий и п�
     const idle = new Game({ levels: [arenaDef], input: new InputHandler(fakeTarget()) });
     assert.equal(idle.tension, 0);
 });
+
+test('пробуждение стража — короткая сцена: мир замирает, потом бой продолжается', () => {
+    const { game, input } = fight('#P.......T........E#');
+    game.player.invuln = 99;
+    game.tick(0);
+    game.tick(40);
+    assert.ok(game.cinema > 0.5, 'сцена началась');
+    assert.ok(game.freeze > 0.5);
+    let updates = 0;
+    const update = game.update.bind(game);
+    game.update = (dt) => { updates++; update(dt); };
+    game.tick(140);
+    assert.equal(updates, 0, 'во время сцены мир стоит');
+    for (let now = 240; now <= 1400; now += 100) game.tick(now);
+    assert.equal(game.cinema, 0, 'сцена закончилась');
+    assert.ok(updates > 0, 'бой пошёл');
+    assert.equal(input.capture, true);
+});

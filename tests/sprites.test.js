@@ -40,6 +40,8 @@ const SIZES = {
     demon: [20, 20],
     heart: [7, 6],
     crown: [21, 12],
+    iconArmor: [10, 10],
+    iconAmulet: [8, 10],
 };
 
 test('есть все спрайты', () => {
