@@ -44,9 +44,9 @@ const game = new Game({
     save: new Save(storage),
     onStateChange: (state, current) => {
         screens.onState(state, current);
-        // Во время уровня звучит фон локации, в остальное время — фон меню.
+        // Во время уровня звучит мелодия его мира, в остальное время — мелодия меню.
         const inLevel = ['playing', 'paused', 'loot'].includes(state);
-        audio.startAmbience(inLevel ? current.levelDef.world : 'menu');
+        audio.startMusic(inLevel ? current.levelDef.world : 'menu');
     },
 });
 
@@ -85,7 +85,8 @@ document.addEventListener('visibilitychange', () => {
     if (document.hidden) game.pause();
 });
 
-// Постоянный цикл экранов: рисует живую сцену за меню и «печатает» сюжетный текст.
+// Постоянный цикл экранов: рисует живую сцену за меню, «печатает» сюжетный текст
+// и ведёт музыку.
 // Пока идёт уровень, поле рисует сама игра.
 function menuFrame(now) {
     const time = now / 1000;
@@ -97,6 +98,7 @@ function menuFrame(now) {
         renderer.drawTitle(time, LEVELS[index], classId, WEAPONS[kind].sprite);
     }
     screens.update(time);
+    audio.update();   // расписывает ближайшие ноты музыки
     requestAnimationFrame(menuFrame);
 }
 
@@ -104,5 +106,5 @@ window.addEventListener('resize', () => renderer.resize());
 renderer.resize();
 game.setVolume(options.volume);
 screens.onState('menu', game);
-audio.startAmbience('menu');
+audio.startMusic('menu');
 requestAnimationFrame(menuFrame);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AudioSystem, SOUNDS, AMBIENCE } from '../js/systems/Audio.js';
+import { AudioSystem, SOUNDS, MUSIC, noteFrequency } from '../js/systems/Audio.js';
 
 // Подмена AudioContext: запоминает созданные осцилляторы и их громкость.
 function fakeContext() {
@@ -10,6 +10,7 @@ function fakeContext() {
             calls,
             setValueAtTime: (value, time) => calls.push(['set', value, time]),
             exponentialRampToValueAtTime: (value, time) => calls.push(['ramp', value, time]),
+            linearRampToValueAtTime: (value, time) => calls.push(['line', value, time]),
         };
     };
     const context = {
@@ -117,42 +118,141 @@ test('все звуки описаны корректно', () => {
     }
 });
 
-// ---------- Фон ----------
+// ---------- Музыка ----------
 
-test('фон: два осциллятора на локацию, повторный запуск ничего не дублирует', () => {
-    const { audio, context } = unlocked();
-    audio.startAmbience('forest');
-    assert.equal(context.oscillators.length, 2);
-    assert.deepEqual(context.oscillators.map((o) => o.frequency.calls[0][1]), AMBIENCE.forest);
-    audio.startAmbience('forest');
-    assert.equal(context.oscillators.length, 2);
+const notes = (context) => context.oscillators.map((o) => o.frequency.calls[0][1]);
+
+test('ноты: 69 — это ля 440 Гц, октава удваивает частоту', () => {
+    assert.equal(noteFrequency(69), 440);
+    assert.ok(Math.abs(noteFrequency(81) - 880) < 1e-9);
+    assert.ok(Math.abs(noteFrequency(60) - 261.63) < 0.01);
 });
 
-test('фон: смена локации останавливает прежний', () => {
-    const { audio, context } = unlocked();
-    audio.startAmbience('forest');
-    audio.startAmbience('dungeon');
-    assert.equal(context.oscillators.length, 4);
-    assert.ok(context.oscillators[0].stopped !== null && context.oscillators[1].stopped !== null);
-    assert.equal(context.oscillators[2].stopped, null);
-    audio.stopAmbience();
-    assert.ok(context.oscillators[3].stopped !== null);
+test('мелодии описаны полностью: четыре такта по восемь долей', () => {
+    assert.deepEqual(Object.keys(MUSIC).sort(), ['castle', 'dungeon', 'forest', 'menu']);
+    for (const [name, def] of Object.entries(MUSIC)) {
+        assert.ok(def.bpm >= 50 && def.bpm <= 80, `${name}: спокойный темп`);
+        assert.equal(def.chords.length, 4, name);
+        assert.equal(def.bass.length, 4, name);
+        assert.equal(def.melody.length, 4, name);
+        for (const bar of def.melody) {
+            assert.equal(bar.length, 8, `${name}: восемь долей в такте`);
+            assert.ok(bar.some((note) => note !== null), `${name}: в такте есть мелодия`);
+            for (const note of bar) assert.ok(note === null || (note >= 60 && note <= 84), `${name}: мелодия в среднем регистре`);
+        }
+        for (const chord of def.chords) {
+            assert.equal(chord.length, 3, `${name}: трезвучия`);
+            for (const note of chord) assert.ok(note >= 48 && note <= 72, name);
+        }
+        for (const note of def.bass) assert.ok(note >= 36 && note <= 55, `${name}: бас ниже аккордов`);
+    }
 });
 
-test('фон: заказанный до разблокировки звука включается после неё', () => {
+test('музыка расписывает ноты только на ближайшие доли секунды', () => {
+    const { audio, context } = unlocked();
+    audio.startMusic('menu');
+    assert.equal(context.oscillators.length, 0, 'ноты ставит update, а не startMusic');
+    audio.update();
+    const first = context.oscillators.length;
+    // Первая доля такта: три ноты аккорда, бас, нота мелодии и её эхо. Вторая доля — пауза.
+    assert.equal(first, 6);
+    // Сами ноты — в пределах 0,6 с; эхо мелодии отстаёт от своей ноты ещё на полторы доли.
+    assert.ok(context.oscillators.every((o) => o.started <= context.currentTime + 1.4));
+    audio.update();
+    assert.equal(context.oscillators.length, first, 'без хода времени новых нот нет');
+    context.currentTime += 1;
+    audio.update();
+    assert.ok(context.oscillators.length > first);
+});
+
+test('первый такт меню: аккорд ля минор, бас и нота ми', () => {
+    const { audio, context } = unlocked();
+    audio.startMusic('menu');
+    audio.update();
+    const played = notes(context).map((frequency) => Math.round(frequency));
+    assert.deepEqual(played.slice(0, 3), [220, 262, 330], 'ля, до, ми');
+    assert.equal(played[3], 110, 'бас — ля октавой ниже');
+    assert.equal(played[4], 659, 'мелодия начинается с ми');
+});
+
+test('ноты музыки нарастают и затухают плавно, без щелчков', () => {
+    const { audio, context } = unlocked();
+    audio.startMusic('forest');
+    audio.update();
+    const envelope = context.gains[1].gain.calls;   // gains[0] — общий регулятор музыки
+    assert.deepEqual(envelope.map((call) => call[0]), ['set', 'line', 'ramp']);
+    assert.ok(envelope[0][1] < 0.001, 'начинается с тишины');
+    assert.ok(envelope[2][1] < 0.001, 'заканчивается тишиной');
+    assert.ok(envelope[1][2] - envelope[0][2] >= 0.5, 'аккорд появляется не мгновенно');
+});
+
+test('повторный запуск той же мелодии ничего не меняет, другая — плавно сменяет', () => {
+    const { audio, context } = unlocked();
+    audio.startMusic('forest');
+    const master = context.gains[0];
+    audio.startMusic('forest');
+    assert.equal(context.gains.length, 1);
+    audio.startMusic('castle');
+    assert.equal(context.gains.length, 2, 'у новой мелодии свой регулятор');
+    const fade = master.gain.calls.at(-1);
+    assert.deepEqual([fade[0], fade[1]], ['line', 0], 'прежняя затихает до нуля');
+    assert.ok(fade[2] > context.currentTime, 'не мгновенно');
+    audio.update();
+    assert.equal(Math.round(notes(context)[0]), 196, 'звучит аккорд замка (соль — нижняя нота ми минора)');
+});
+
+test('мелодия, заказанная до разблокировки звука, включается после неё', () => {
     const context = fakeContext();
     const audio = new AudioSystem(() => context);
-    audio.startAmbience('menu');
+    audio.startMusic('menu');
+    audio.update();
     assert.equal(context.oscillators.length, 0);
     audio.unlock();
-    assert.equal(context.oscillators.length, 2);
+    audio.update();
+    assert.ok(context.oscillators.length > 0);
 });
 
-test('фон: громкость меняется на лету и остаётся тихой', () => {
+test('громкость музыки меняется на лету; на нуле ноты не создаются', () => {
     const { audio, context } = unlocked();
-    audio.startAmbience('castle');
+    audio.startMusic('castle');
     audio.setMusicVolume(1);
-    assert.ok(context.gains.at(-1).gain.value <= 0.15, 'фон тише эффектов даже на максимуме');
+    assert.ok(context.gains[0].gain.value <= 0.7, 'музыка остаётся фоном даже на максимуме');
     audio.setMusicVolume(0);
-    assert.equal(context.gains.at(-1).gain.value, 0);
+    assert.equal(context.gains[0].gain.value, 0);
+    audio.update();
+    assert.equal(context.oscillators.length, 0);
+    audio.setMusicVolume(0.5);
+    for (let i = 0; i < 6; i++) {
+        context.currentTime += 0.5;
+        audio.update();
+    }
+    assert.ok(context.oscillators.length > 0, 'после включения музыка продолжается');
+});
+
+test('после долгой паузы музыка не «догоняет» пропущенное залпом нот', () => {
+    const { audio, context } = unlocked();
+    audio.startMusic('dungeon');
+    audio.update();
+    const before = context.oscillators.length;
+    context.currentTime += 120;   // вкладка была скрыта две минуты
+    audio.update();
+    assert.ok(context.oscillators.length - before < 12, `новых нот ${context.oscillators.length - before}`);
+    assert.ok(context.oscillators.at(-1).started >= context.currentTime, 'ноты не ставятся в прошлое');
+});
+
+test('остановка музыки заглушает её и сбрасывает заказ', () => {
+    const { audio, context } = unlocked();
+    audio.startMusic('menu');
+    audio.stopMusic();
+    audio.update();
+    assert.equal(context.oscillators.length, 0);
+    assert.equal(audio.wanted, null);
+});
+
+test('отказ браузера возобновить звук не роняет игру', async () => {
+    const context = fakeContext();
+    context.resume = () => Promise.reject(new Error('not allowed'));
+    const audio = new AudioSystem(() => context);
+    assert.doesNotThrow(() => audio.unlock());
+    await new Promise((resolve) => setImmediate(resolve));   // необработанный отказ уронил бы тест
 });

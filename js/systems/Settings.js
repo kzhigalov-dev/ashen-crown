@@ -6,7 +6,7 @@ export const SETTINGS_KEY = 'ashen-crown-settings';
 export function defaultSettings() {
     return {
         volume: 0.5,   // громкость эффектов, 0…1
-        music: 0.3,    // громкость фона, 0…1
+        music: 0.5,    // громкость музыки, 0…1
         shake: true,   // тряска экрана при ударах
         notes: true,   // записки у костров
         lootPopup: true,  // окно с вопросом «надеть?» при находке предмета
